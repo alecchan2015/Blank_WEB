@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: blank_web_backend
+    restart: always
+    environment:
+      - DATABASE_URL=sqlite:///./blank_web.db
+      - SECRET_KEY=${SECRET_KEY:-change_me_in_production_please}
+      - UPLOAD_DIR=/app/uploads
+    volumes:
+      - ./backend/blank_web.db:/app/blank_web.db
+      - ./uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    networks:
+      - blank_web_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: blank_web_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - blank_web_net
+
+networks:
+  blank_web_net:
+    driver: bridge
+
+volumes:
+  uploads:
