@@ -106,13 +106,18 @@ class LLMService:
             api_key=api_key,
             base_url=base_url if base_url else None
         )
-        stream = await client.chat.completions.create(
+        # stream_options is only supported by OpenAI SDK >=1.14 and native OpenAI API;
+        # Volcano Engine and other compatible APIs may reject it.
+        kwargs = dict(
             model=model_name,
             messages=messages,
             stream=True,
-            stream_options={"include_usage": True},
             max_tokens=4096,
         )
+        if not base_url:  # native OpenAI — safe to request usage
+            kwargs["stream_options"] = {"include_usage": True}
+
+        stream = await client.chat.completions.create(**kwargs)
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
