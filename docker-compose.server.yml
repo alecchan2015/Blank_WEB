@@ -19,6 +19,10 @@ services:
       - UPLOAD_DIR=/app/data/uploads
       - PPT_PROVIDER=${PPT_PROVIDER:-local}
       - PPT_FALLBACK=${PPT_FALLBACK:-local}
+      # Mihomo (Clash Meta) proxy on host — enables Gamma API access from CN server
+      - HTTP_PROXY=http://172.17.0.1:7890
+      - HTTPS_PROXY=http://172.17.0.1:7890
+      - NO_PROXY=localhost,127.0.0.1,172.17.0.0/12,192.168.0.0/16
     volumes:
       - ./data:/app/data
     ports:
