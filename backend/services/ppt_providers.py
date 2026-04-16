@@ -109,6 +109,7 @@ class GammaProvider(BasePPTProvider):
             "textMode":               "generate",
             "numCards":               self.num_cards,
             "cardSplit":              "auto",
+            "exportAs":               "pptx",
             "additionalInstructions": self.AGENT_INSTRUCTIONS.get(
                 agent_type, "撰写一份专业的商业策划演示文稿。"
             ),
@@ -140,9 +141,12 @@ class GammaProvider(BasePPTProvider):
                     data = p.json()
                     status = (data.get("status") or "").lower()
                     if status in ("completed", "complete"):
-                        # v1.0 API returns gammaUrl (web page); pptxExportUrl
-                        # may appear in future API versions
-                        pptx_url  = data.get("pptxExportUrl") or data.get("exportUrl")
+                        # exportAs=pptx triggers Gamma to return exportUrl
+                        pptx_url  = (
+                            data.get("exportUrl")
+                            or data.get("pptxExportUrl")
+                            or (data.get("export") or {}).get("url")
+                        )
                         gamma_url = data.get("gammaUrl")
                         break
                     if status == "failed":
@@ -156,11 +160,12 @@ class GammaProvider(BasePPTProvider):
                 raise RuntimeError("Gamma generation timed out (>300s)")
 
             if pptx_url:
-                # Direct PPTX download (future API versions)
-                dl = await httpx.AsyncClient(timeout=60).get(pptx_url)
-                dl.raise_for_status()
-                Path(file_path).write_bytes(dl.content)
-                print(f"[Gamma] PPTX downloaded from {pptx_url}")
+                # Download Gamma-designed PPTX (with exportAs=pptx, files can be 10-50 MB)
+                async with httpx.AsyncClient(timeout=120) as dl_client:
+                    dl = await dl_client.get(pptx_url, follow_redirects=True)
+                    dl.raise_for_status()
+                    Path(file_path).write_bytes(dl.content)
+                    print(f"[Gamma] PPTX downloaded: {len(dl.content)/1024/1024:.1f} MB from {pptx_url}")
             else:
                 # v1.0 only provides a web URL — fall back to local PPTX renderer
                 # but embed the gamma_url as a reference slide
