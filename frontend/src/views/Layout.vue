@@ -58,7 +58,7 @@ const store = useUserStore()
 async function logout() {
   await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
   store.logout()
-  router.push('/login')
+  router.push('/')
 }
 </script>
 

@@ -2,18 +2,19 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from './store'
 
 const routes = [
+  { path: '/', component: () => import('./views/Home.vue'), meta: {} },
   { path: '/login', component: () => import('./views/Login.vue'), meta: { guest: true } },
   { path: '/register', component: () => import('./views/Register.vue'), meta: { guest: true } },
   {
-    path: '/',
+    path: '/app',
     component: () => import('./views/Layout.vue'),
     meta: { requiresAuth: true },
     children: [
       { path: '', redirect: '/dashboard' },
-      { path: 'dashboard', component: () => import('./views/Dashboard.vue') },
-      { path: 'tasks/new', component: () => import('./views/NewTask.vue') },
-      { path: 'tasks/:id', component: () => import('./views/TaskDetail.vue') },
-      { path: 'logo', component: () => import('./views/LogoGenerator.vue') },
+      { path: '/dashboard', component: () => import('./views/Dashboard.vue') },
+      { path: '/tasks/new', component: () => import('./views/NewTask.vue') },
+      { path: '/tasks/:id', component: () => import('./views/TaskDetail.vue') },
+      { path: '/logo', component: () => import('./views/LogoGenerator.vue') },
     ],
   },
   {
@@ -46,7 +47,7 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !store.isLoggedIn) return '/login'
   if (to.meta.requiresAdmin && !store.isAdmin) return '/'
-  if (to.meta.guest && store.isLoggedIn) return store.isAdmin ? '/admin' : '/dashboard'
+  if (to.meta.guest && store.isLoggedIn) return store.isAdmin ? '/admin/dashboard' : '/dashboard'
 })
 
 export default router
