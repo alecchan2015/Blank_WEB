@@ -37,7 +37,13 @@ export const tasksAPI = {
 
 // Files
 export const filesAPI = {
-  download: (resultId) => api.get(`/files/${resultId}/download`, { responseType: 'blob' }),
+  // Build a direct browser-download URL with the JWT as a query parameter.
+  // This lets the browser handle the transfer natively — no timeout, native
+  // progress bar, no memory overhead, resumable via Range. Best for files >10MB.
+  downloadUrl: (resultId) => {
+    const token = localStorage.getItem('token') || ''
+    return `/api/files/${resultId}/download?token=${encodeURIComponent(token)}`
+  },
   preview: (resultId) => api.get(`/files/${resultId}/preview`),
 }
 
@@ -88,10 +94,11 @@ export const adminAPI = {
 export const logoAPI = {
   generate: (data) => api.post('/logo/generate', data),
   progressUrl: (id, token) => `/api/logo/progress/${id}?token=${token}`,
-  download: (id, format) => api.get(`/logo/download/${id}`, {
-    params: { format },
-    responseType: 'blob',
-  }),
+  // Browser-native download URL (JWT in query string, no timeout)
+  downloadUrl: (id, format) => {
+    const token = localStorage.getItem('token') || ''
+    return `/api/logo/download/${id}?format=${encodeURIComponent(format)}&token=${encodeURIComponent(token)}`
+  },
 }
 
 // Agents meta

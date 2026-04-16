@@ -718,9 +718,45 @@ def delete_task(
 @app.get("/api/files/{result_id}/download", tags=["files"])
 def download_file(
     result_id: int,
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    request: Request = None,
 ):
+    """
+    File download endpoint.
+
+    Supports two authentication methods:
+      1. Authorization header: `Bearer <token>` (standard API calls)
+      2. Query parameter: `?token=<token>` (browser-native downloads via <a href>)
+
+    Browser-native downloads are preferred for large files (>10MB) because:
+      - No axios/fetch timeout limit
+      - Native progress bar in browser
+      - Resumable (with Range header)
+      - Doesn't block tab / consume memory
+    """
+    from jose import jwt, JWTError
+    from auth import SECRET_KEY, ALGORITHM
+
+    # Resolve token from query param OR Authorization header
+    jwt_token = token
+    if not jwt_token and request is not None:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            jwt_token = auth_header[7:]
+
+    if not jwt_token:
+        raise HTTPException(401, "未提供身份凭证")
+
+    try:
+        payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        current_user = db.query(User).filter(User.username == username).first()
+        if not current_user or not current_user.is_active:
+            raise HTTPException(401, "身份验证失败")
+    except JWTError:
+        raise HTTPException(401, "身份验证失败")
+
     result = db.query(TaskResult).filter(TaskResult.id == result_id).first()
     if not result:
         raise HTTPException(404, "文件不存在")
@@ -736,43 +772,39 @@ def download_file(
     if current_user.credits < credits_needed:
         raise HTTPException(402, f"积分不足，需要 {credits_needed} 积分，当前 {current_user.credits} 积分")
 
-    # Deduct credits
-    current_user.credits -= credits_needed
-    tx = CreditTransaction(
-        user_id=current_user.id,
-        amount=-credits_needed,
-        reason=f"下载文件 {result.file_name}",
-        task_result_id=result.id,
-    )
-    db.add(tx)
-    db.commit()
+    # Deduct credits (only on first download to avoid double-billing on browser
+    # retry). Simple approach: skip deduction if an earlier transaction exists
+    # for this task_result_id by this user.
+    prior = db.query(CreditTransaction).filter(
+        CreditTransaction.user_id == current_user.id,
+        CreditTransaction.task_result_id == result.id,
+    ).first()
+    if not prior and credits_needed > 0:
+        current_user.credits -= credits_needed
+        tx = CreditTransaction(
+            user_id=current_user.id,
+            amount=-credits_needed,
+            reason=f"下载文件 {result.file_name}",
+            task_result_id=result.id,
+        )
+        db.add(tx)
+        db.commit()
 
     file_path = result.file_path
     file_name = result.file_name
 
-    # Auto-ZIP for files > 10 MB
-    ZIP_THRESHOLD = 10 * 1024 * 1024  # 10 MB
-    file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "文件已被清理")
 
-    if file_size > ZIP_THRESHOLD:
-        import zipfile
-        zip_path = file_path + ".zip"
-        if not os.path.exists(zip_path) or os.path.getmtime(zip_path) < os.path.getmtime(file_path):
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.write(file_path, file_name)
-        zip_name = os.path.splitext(file_name)[0] + ".zip"
-        return FileResponse(
-            path=zip_path,
-            filename=zip_name,
-            media_type="application/zip",
-        )
-
+    # Serve original file directly. PPTX/PNG/PDF are already compressed formats;
+    # re-zipping adds CPU time and barely reduces size (~10-15%).
     media_types = {
-        "md": "text/markdown",
-        "pdf": "application/pdf",
-        "png": "image/png",
+        "md":   "text/markdown",
+        "pdf":  "application/pdf",
+        "png":  "image/png",
         "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "psd": "image/vnd.adobe.photoshop",
+        "psd":  "image/vnd.adobe.photoshop",
+        "zip":  "application/zip",
     }
     media_type = media_types.get(result.file_type, "application/octet-stream")
     return FileResponse(
@@ -1695,10 +1727,36 @@ async def logo_progress(
 def download_logo(
     generation_id: int,
     format: str = Query("png"),
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    request: Request = None,
 ):
-    """Download generated logo in specified format."""
+    """Download generated logo in specified format.
+
+    Accepts JWT via Authorization header OR ?token= query param (for browser-
+    native downloads via <a href>).
+    """
+    from jose import jwt, JWTError
+    from auth import SECRET_KEY, ALGORITHM
+
+    jwt_token = token
+    if not jwt_token and request is not None:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            jwt_token = auth_header[7:]
+
+    if not jwt_token:
+        raise HTTPException(401, "未提供身份凭证")
+
+    try:
+        payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        current_user = db.query(User).filter(User.username == username).first()
+        if not current_user or not current_user.is_active:
+            raise HTTPException(401, "身份验证失败")
+    except JWTError:
+        raise HTTPException(401, "身份验证失败")
+
     gen = db.query(LogoGeneration).filter(
         LogoGeneration.id == generation_id,
         LogoGeneration.user_id == current_user.id,

@@ -450,29 +450,20 @@ function closeEventSource() {
   }
 }
 
-async function handleDownload(format) {
+function handleDownload(format) {
   if (downloading.value) return
   const variant = variants.value[selectedVariant.value]
   if (!variant) return
 
-  downloading.value = format
-  try {
-    const blob = await logoAPI.download(generationId.value, format)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-
-    const ext = format === 'zip' ? 'zip' : format
-    a.download = `${form.brandName}_logo_${selectedVariant.value + 1}.${ext}`
-    a.click()
-    URL.revokeObjectURL(url)
-    await store.fetchMe()
-    ElMessage.success('下载成功')
-  } catch (e) {
-    ElMessage.error(e.message || '下载失败')
-  } finally {
-    downloading.value = ''
-  }
+  const ext = format === 'zip' ? 'zip' : format
+  const a = document.createElement('a')
+  a.href = logoAPI.downloadUrl(generationId.value, format)
+  a.download = `${form.brandName}_logo_${selectedVariant.value + 1}.${ext}`
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  ElMessage.success('已开始下载')
 }
 
 function handleReset() {
@@ -524,18 +515,14 @@ function viewHistoryItem(item) {
   }
 }
 
-async function downloadHistory(item, format) {
-  try {
-    const blob = await logoAPI.download(item.id, format)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${item.brand_name}_logo.${format === 'zip' ? 'zip' : format}`
-    a.click()
-    URL.revokeObjectURL(url)
-  } catch (e) {
-    ElMessage.error(e.message || '下载失败')
-  }
+function downloadHistory(item, format) {
+  const a = document.createElement('a')
+  a.href = logoAPI.downloadUrl(item.id, format)
+  a.download = `${item.brand_name}_logo.${format === 'zip' ? 'zip' : format}`
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
 }
 
 function styleLabel(val) {

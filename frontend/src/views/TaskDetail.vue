@@ -226,28 +226,19 @@ async function handleRegenerate() {
   }
 }
 
-async function downloadFile(file) {
-  file.downloading = true
-  try {
-    const blob = await filesAPI.download(file.id)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    // If backend returned a ZIP (large file auto-compression), adjust filename
-    let downloadName = file.name
-    if (blob.type === 'application/zip' && !downloadName.endsWith('.zip')) {
-      downloadName = downloadName.replace(/\.[^.]+$/, '.zip')
-    }
-    a.download = downloadName
-    a.click()
-    URL.revokeObjectURL(url)
-    await store.fetchMe()
-    ElMessage.success('下载成功')
-  } catch (e) {
-    ElMessage.error(e.message)
-  } finally {
-    file.downloading = false
-  }
+function downloadFile(file) {
+  // Browser-native download — no axios timeout, shows native progress bar,
+  // doesn't block the tab, and handles large files (>10MB) reliably.
+  const a = document.createElement('a')
+  a.href = filesAPI.downloadUrl(file.id)
+  a.download = file.name
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  ElMessage.success('已开始下载，请查看浏览器下载进度')
+  // Refresh credit balance after a short delay (backend deducts on first hit)
+  setTimeout(() => { store.fetchMe().catch(() => {}) }, 1500)
 }
 
 onMounted(async () => {
