@@ -13,6 +13,7 @@ const routes = [
       { path: 'dashboard', component: () => import('./views/Dashboard.vue') },
       { path: 'tasks/new', component: () => import('./views/NewTask.vue') },
       { path: 'tasks/:id', component: () => import('./views/TaskDetail.vue') },
+      { path: 'logo', component: () => import('./views/LogoGenerator.vue') },
     ],
   },
   {
@@ -28,6 +29,7 @@ const routes = [
       { path: 'users', component: () => import('./views/admin/Users.vue') },
       { path: 'tasks', component: () => import('./views/admin/Tasks.vue') },
       { path: 'token-usage', component: () => import('./views/admin/TokenUsage.vue') },
+      { path: 'logo-provider', component: () => import('./views/admin/LogoProvider.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

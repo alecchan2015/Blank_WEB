@@ -54,6 +54,9 @@ export const adminAPI = {
   createKnowledge: (data) => api.post('/admin/knowledge', data),
   updateKnowledge: (id, data) => api.put(`/admin/knowledge/${id}`, data),
   deleteKnowledge: (id) => api.delete(`/admin/knowledge/${id}`),
+  uploadKnowledge: (formData, agentType) => api.post(`/admin/knowledge/upload?agent_type=${encodeURIComponent(agentType || 'strategy')}`, formData, { timeout: 120000, headers: { 'Content-Type': 'multipart/form-data' } }),
+  importSeedKnowledge: () => api.post('/admin/knowledge/import-seed', {}, { timeout: 60000 }),
+  getKnowledgeStats: () => api.get('/admin/knowledge/stats'),
   // Users
   getUsers: () => api.get('/admin/users'),
   updateUserCredits: (id, data) => api.put(`/admin/users/${id}/credits`, data),
@@ -71,6 +74,24 @@ export const adminAPI = {
     { provider },
     { timeout: 330000 },   // Gamma can take 1-5 min to render
   ),
+  // Logo Provider
+  getLogoProvider: () => api.get('/admin/logo-provider'),
+  saveLogoProvider: (data) => api.put('/admin/logo-provider', data),
+  testLogoProvider: (provider) => api.post(
+    '/admin/logo-provider/test',
+    { provider },
+    { timeout: 120000 },
+  ),
+}
+
+// Logo
+export const logoAPI = {
+  generate: (data) => api.post('/logo/generate', data),
+  progressUrl: (id, token) => `/api/logo/progress/${id}?token=${token}`,
+  download: (id, format) => api.get(`/logo/download/${id}`, {
+    params: { format },
+    responseType: 'blob',
+  }),
 }
 
 // Agents meta

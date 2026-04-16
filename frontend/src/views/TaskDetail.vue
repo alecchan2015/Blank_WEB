@@ -94,16 +94,16 @@ const agentFiles = ref({})
 const regenerating = ref(false)
 let es = null
 
-const agentNames = { strategy: '战略规划专家', brand: '品牌设计专家', operations: '运营实施专家' }
-const agentIcon  = { strategy: '🎯', brand: '🎨', operations: '🚀' }
-const agentTagType = { strategy: 'primary', brand: 'success', operations: 'warning' }
+const agentNames = { strategy: '战略规划专家', brand: '品牌设计专家', logo_design: 'Logo设计专家', operations: '运营实施专家' }
+const agentIcon  = { strategy: '🎯', brand: '🎨', logo_design: '✨', operations: '🚀' }
+const agentTagType = { strategy: 'primary', brand: 'success', logo_design: 'danger', operations: 'warning' }
 const statusType   = { pending: 'info', processing: 'warning', completed: 'success', failed: 'danger' }
 const statusLabel  = { pending: '待处理', processing: '进行中', completed: '已完成', failed: '失败' }
 const fileIcon     = { md: '📄', pdf: '📕', png: '🖼️', pptx: '📊', psd: '🎨' }
 
 const orderedAgents = computed(() => {
   if (!task.value) return []
-  return ['strategy', 'brand', 'operations'].filter(a => task.value.agents_selected.includes(a))
+  return ['strategy', 'brand', 'logo_design', 'operations'].filter(a => task.value.agents_selected.includes(a))
 })
 
 function renderMd(text) {

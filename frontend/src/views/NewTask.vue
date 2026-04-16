@@ -44,7 +44,7 @@
 
         <!-- Quick Select -->
         <div class="quick-select">
-          <el-button size="small" @click="selectAll">全选（三专家协作）</el-button>
+          <el-button size="small" @click="selectAll">全选（四专家协作）</el-button>
           <el-button size="small" @click="form.agents_selected = []">清空</el-button>
         </div>
       </div>
@@ -84,13 +84,14 @@ const form = ref({ query: '', brand_name: '', agents_selected: [] })
 const agentDesc = {
   strategy: '市场分析、竞争定位、品牌战略规划',
   brand: 'Logo概念、色彩体系、视觉物料规范',
+  logo_design: 'AI智能生成Logo，输出PNG/PSD/SVG多格式',
   operations: '渠道策略、营销计划、执行路径',
 }
 
-const agentNames = { strategy: '战略规划', brand: '品牌设计', operations: '运营实施' }
+const agentNames = { strategy: '战略规划', brand: '品牌设计', logo_design: 'Logo设计', operations: '运营实施' }
 
 const selectedAgentNames = computed(() =>
-  ['strategy', 'brand', 'operations'].filter(a => form.value.agents_selected.includes(a)).map(a => agentNames[a])
+  ['strategy', 'brand', 'logo_design', 'operations'].filter(a => form.value.agents_selected.includes(a)).map(a => agentNames[a])
 )
 
 function toggleAgent(type) {

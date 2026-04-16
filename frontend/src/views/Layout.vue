@@ -14,6 +14,10 @@
           <el-icon><Plus /></el-icon>
           <span>新建任务</span>
         </el-menu-item>
+        <el-menu-item index="/logo">
+          <el-icon><PictureFilled /></el-icon>
+          <span>Logo 生成</span>
+        </el-menu-item>
       </el-menu>
       <div class="sidebar-bottom">
         <div class="credits-badge">

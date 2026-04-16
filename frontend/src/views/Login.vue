@@ -21,7 +21,7 @@
               登 录
             </el-button>
           </el-form>
-          <div class="hint">默认管理员账号：admin / Admin@123</div>
+          <div class="hint">默认管理员账号：adminccl / ccl@123</div>
         </el-tab-pane>
 
         <el-tab-pane label="注册" name="register">

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Query
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from database import Base, engine, get_db
-from models import User, LLMConfig, AgentKnowledge, Task, TaskResult, CreditTransaction, TokenUsage
+from models import User, LLMConfig, AgentKnowledge, Task, TaskResult, CreditTransaction, TokenUsage, LogoGeneration
 from auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, get_current_admin
@@ -44,11 +44,11 @@ async def lifespan(app: FastAPI):
     # Seed default admin
     db = next(get_db())
     try:
-        if not db.query(User).filter(User.username == "admin").first():
+        if not db.query(User).filter(User.username == "adminccl").first():
             admin = User(
-                username="admin",
+                username="adminccl",
                 email="admin@blankweb.com",
-                password_hash=get_password_hash("Admin@123"),
+                password_hash=get_password_hash("ccl@123"),
                 role="admin",
                 credits=99999,
             )
@@ -121,7 +121,7 @@ def create_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    valid_agents = {"strategy", "brand", "operations"}
+    valid_agents = {"strategy", "brand", "logo_design", "operations"}
     agents = [a for a in body.agents_selected if a in valid_agents]
     if not agents:
         raise HTTPException(400, "请至少选择一个Agent专家")
@@ -402,6 +402,226 @@ async def stream_task(
                         "result_id": tr.id,
                         "files": files_generated,
                     })}
+
+            # ── Logo Design Agent (runs after LLM agents) ─────────────
+            if "logo_design" in (task.agents_selected or []):
+                yield {"data": json.dumps({
+                    "type": "agent_start",
+                    "agent": "logo_design",
+                    "name": "Logo设计专家",
+                })}
+                yield {"data": json.dumps({
+                    "type": "chunk",
+                    "agent": "logo_design",
+                    "content": "🎨 正在为您的品牌智能生成 Logo...\n\n",
+                })}
+
+                logo_files = []
+                logo_content_parts = []
+                try:
+                    from services.logo_providers import generate_via_providers, build_logo_prompt
+                    from services.logo_settings import load_config as load_logo_config
+
+                    logo_cfg = load_logo_config(db)
+                    brand_name = task.brand_name or "品牌"
+
+                    # Use brand agent output for style hints if available
+                    brand_content = agent_contents.get("brand", "")
+                    # Detect style from content
+                    style = logo_cfg.get("style", "modern")
+                    primary_color = ""
+                    import re as _re
+                    hex_matches = _re.findall(r'#([A-Fa-f0-9]{6})', brand_content)
+                    if hex_matches:
+                        primary_color = f"#{hex_matches[0]}"
+
+                    # Detect industry from query
+                    industry = ""
+                    for kw, ind in [("家具", "家居家具"), ("美妆", "美妆护肤"),
+                                    ("科技", "科技智能"), ("食品", "食品饮料"),
+                                    ("服装", "服装时尚"), ("教育", "教育培训")]:
+                        if kw in (task.query or ""):
+                            industry = ind
+                            break
+
+                    prompt = build_logo_prompt(
+                        brand_name=brand_name,
+                        style=style,
+                        primary_color=primary_color,
+                        include_text=logo_cfg.get("include_text", True),
+                        industry=industry,
+                    )
+
+                    yield {"data": json.dumps({
+                        "type": "chunk",
+                        "agent": "logo_design",
+                        "content": f"**提示词**: {prompt}\n\n⏳ 正在调用 AI 生成引擎...\n\n",
+                    })}
+
+                    result, provider_name = await generate_via_providers(
+                        brand_name=brand_name,
+                        prompt=prompt,
+                        style=style,
+                        include_text=logo_cfg.get("include_text", True),
+                        variant_count=min(3, logo_cfg.get("variant_count", 3)),
+                        primary_color=primary_color,
+                        db=db,
+                    )
+
+                    if result.success and result.variants:
+                        logo_content_parts.append(
+                            f"✅ Logo 生成成功！\n\n"
+                            f"- **生成引擎**: {provider_name}\n"
+                            f"- **变体数量**: {len(result.variants)}\n"
+                            f"- **风格**: {style}\n\n"
+                        )
+                        yield {"data": json.dumps({
+                            "type": "chunk",
+                            "agent": "logo_design",
+                            "content": logo_content_parts[-1],
+                        })}
+
+                        # Download and save logo variants
+                        import httpx
+                        from services.file_service import ensure_upload_dir, sanitize_filename
+                        ensure_upload_dir()
+                        safe_brand = sanitize_filename(brand_name)
+                        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+
+                        for v in result.variants:
+                            png_url = v.get("png_url", "")
+                            if not png_url:
+                                continue
+                            try:
+                                async with httpx.AsyncClient(timeout=60) as hc:
+                                    resp = await hc.get(png_url)
+                                    resp.raise_for_status()
+                                    fname = f"{safe_brand}_logo_v{v['index']+1}_{ts}.png"
+                                    fpath = os.path.join(UPLOAD_DIR, fname)
+                                    with open(fpath, "wb") as f:
+                                        f.write(resp.content)
+
+                                    logo_result = TaskResult(
+                                        task_id=task.id,
+                                        agent_type="logo_design",
+                                        content=None,
+                                        file_path=fpath,
+                                        file_type="png",
+                                        file_name=fname,
+                                        download_credits=0,
+                                    )
+                                    db.add(logo_result)
+                                    db.commit()
+                                    db.refresh(logo_result)
+                                    logo_files.append({
+                                        "id": logo_result.id,
+                                        "type": "png",
+                                        "name": fname,
+                                    })
+                                    logo_content_parts.append(
+                                        f"- 方案 {v['index']+1}: `{fname}` ✅\n"
+                                    )
+                                    yield {"data": json.dumps({
+                                        "type": "chunk",
+                                        "agent": "logo_design",
+                                        "content": logo_content_parts[-1],
+                                    })}
+                            except Exception as e:
+                                print(f"[Logo] variant {v['index']} download error: {e}")
+                                logo_content_parts.append(f"- 方案 {v['index']+1}: 下载失败 ❌\n")
+                                yield {"data": json.dumps({
+                                    "type": "chunk",
+                                    "agent": "logo_design",
+                                    "content": logo_content_parts[-1],
+                                })}
+
+                        # Also generate PSD with first logo
+                        if logo_files:
+                            try:
+                                first_path = os.path.join(
+                                    UPLOAD_DIR,
+                                    logo_files[0]["name"],
+                                )
+                                from PIL import Image as PILImage
+                                from psd_tools import PSDImage
+                                logo_img = PILImage.open(first_path).convert("RGBA")
+                                W, H = 1024, 1024
+                                psd = PSDImage.new("RGBA", (W, H))
+                                white_bg = PILImage.new("RGBA", (W, H), (255, 255, 255, 255))
+                                psd.append(psd.create_pixel_layer(white_bg, name="Background White"))
+                                logo_resized = logo_img.resize((W, H), PILImage.LANCZOS)
+                                psd.append(psd.create_pixel_layer(logo_resized, name="Logo"))
+                                black_bg = PILImage.new("RGBA", (W, H), (0, 0, 0, 255))
+                                bl = psd.create_pixel_layer(black_bg, name="Background Black")
+                                bl.visible = False
+                                psd.append(bl)
+
+                                psd_fname = f"{safe_brand}_logo_{ts}.psd"
+                                psd_fpath = os.path.join(UPLOAD_DIR, psd_fname)
+                                psd.save(psd_fpath)
+
+                                psd_result = TaskResult(
+                                    task_id=task.id,
+                                    agent_type="logo_design",
+                                    content=None,
+                                    file_path=psd_fpath,
+                                    file_type="psd",
+                                    file_name=psd_fname,
+                                    download_credits=0,
+                                )
+                                db.add(psd_result)
+                                db.commit()
+                                db.refresh(psd_result)
+                                logo_files.append({
+                                    "id": psd_result.id,
+                                    "type": "psd",
+                                    "name": psd_fname,
+                                })
+                                logo_content_parts.append(f"\n📎 PSD 分层文件: `{psd_fname}` ✅\n")
+                                yield {"data": json.dumps({
+                                    "type": "chunk",
+                                    "agent": "logo_design",
+                                    "content": logo_content_parts[-1],
+                                })}
+                            except Exception as e:
+                                print(f"[Logo] PSD gen error: {e}")
+                    else:
+                        err_msg = f"❌ Logo 生成失败: {result.error}\n"
+                        logo_content_parts.append(err_msg)
+                        yield {"data": json.dumps({
+                            "type": "chunk",
+                            "agent": "logo_design",
+                            "content": err_msg,
+                        })}
+
+                except Exception as e:
+                    err_msg = f"❌ Logo 生成出错: {str(e)}\n"
+                    logo_content_parts.append(err_msg)
+                    yield {"data": json.dumps({
+                        "type": "chunk",
+                        "agent": "logo_design",
+                        "content": err_msg,
+                    })}
+                    print(f"[Logo] Task agent error: {e}")
+
+                # Save content result
+                full_logo_content = "".join(logo_content_parts)
+                logo_tr = TaskResult(
+                    task_id=task.id,
+                    agent_type="logo_design",
+                    content=full_logo_content,
+                    download_credits=0,
+                )
+                db.add(logo_tr)
+                db.commit()
+                db.refresh(logo_tr)
+
+                yield {"data": json.dumps({
+                    "type": "agent_done",
+                    "agent": "logo_design",
+                    "result_id": logo_tr.id,
+                    "files": logo_files,
+                })}
 
             task.status = "completed"
             task.completed_at = datetime.utcnow()
@@ -733,6 +953,120 @@ def delete_knowledge(
     return {"message": "已删除"}
 
 
+@app.post("/api/admin/knowledge/upload", tags=["admin"])
+async def upload_knowledge_document(
+    file: UploadFile = File(...),
+    agent_type: str = Query("strategy"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    """Upload a document for AI-powered knowledge extraction."""
+    from services.kb_upload_service import process_uploaded_file
+
+    allowed_ext = {".pdf", ".docx", ".txt", ".md", ".zip"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in allowed_ext:
+        raise HTTPException(400, f"不支持的文件类型: {ext}，支持: {', '.join(allowed_ext)}")
+
+    # Save uploaded file
+    upload_path = os.path.join(UPLOAD_DIR, f"kb_{int(datetime.utcnow().timestamp())}_{file.filename}")
+    with open(upload_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    try:
+        result = await process_uploaded_file(
+            file_path=upload_path,
+            file_name=file.filename,
+            agent_type=agent_type,
+            db=db,
+            user_id=current_user.id,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"处理文件失败: {str(e)}")
+
+
+@app.post("/api/admin/knowledge/import-seed", tags=["admin"])
+def import_seed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    """Import built-in seed knowledge base (comprehensive HBIS + basic)."""
+    from services.seed_knowledge import SEED_KNOWLEDGE
+
+    # Check if comprehensive seeds already imported
+    existing_titles = {
+        row[0]
+        for row in db.query(AgentKnowledge.title).filter(
+            AgentKnowledge.is_active == True
+        ).all()
+    }
+
+    count = 0
+    for entry in SEED_KNOWLEDGE:
+        if entry["title"] in existing_titles:
+            continue
+        item = AgentKnowledge(
+            agent_type=entry["agent_type"],
+            title=entry["title"],
+            content=entry["content"],
+            created_by=current_user.id,
+            knowledge_type=entry.get("knowledge_type", "framework"),
+            source="seed",
+            quality_score=9,
+            tags=entry.get("tags", ""),
+        )
+        db.add(item)
+        count += 1
+
+    if count > 0:
+        db.commit()
+
+    if count == 0:
+        return {"message": "种子知识库已导入过，跳过", "entries_created": 0}
+    return {"message": f"成功导入 {count} 条种子知识", "entries_created": count}
+
+
+@app.get("/api/admin/knowledge/stats", tags=["admin"])
+def knowledge_stats(
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    """Knowledge base statistics."""
+    from sqlalchemy import func
+
+    total = db.query(AgentKnowledge).filter(AgentKnowledge.is_active == True).count()
+
+    by_agent = dict(
+        db.query(AgentKnowledge.agent_type, func.count(AgentKnowledge.id))
+        .filter(AgentKnowledge.is_active == True)
+        .group_by(AgentKnowledge.agent_type)
+        .all()
+    )
+
+    by_type = dict(
+        db.query(AgentKnowledge.knowledge_type, func.count(AgentKnowledge.id))
+        .filter(AgentKnowledge.is_active == True)
+        .group_by(AgentKnowledge.knowledge_type)
+        .all()
+    )
+
+    by_source = dict(
+        db.query(AgentKnowledge.source, func.count(AgentKnowledge.id))
+        .filter(AgentKnowledge.is_active == True)
+        .group_by(AgentKnowledge.source)
+        .all()
+    )
+
+    return {
+        "total": total,
+        "by_agent": by_agent,
+        "by_type": by_type,
+        "by_source": by_source,
+    }
+
+
 # User Management
 @app.get("/api/admin/users", response_model=List[UserOut], tags=["admin"])
 def list_users(db: Session = Depends(get_db), _=Depends(get_current_admin)):
@@ -976,6 +1310,433 @@ def get_token_usage_filters(
         "models": [m[0] for m in models],
         "providers": [p[0] for p in providers],
         "users": [{"id": u.id, "username": u.username} for u in users],
+    }
+
+
+# ── Logo Provider Admin Configuration ─────────────────────────────────────────
+@app.get("/api/admin/logo-provider", tags=["admin"])
+def get_logo_provider_config(
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    from services.logo_settings import load_config, redact
+    from services.logo_providers import list_providers
+    return {
+        "config":    redact(load_config(db)),
+        "providers": list_providers(db),
+    }
+
+
+@app.put("/api/admin/logo-provider", tags=["admin"])
+def update_logo_provider_config(
+    body: dict,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    from services.logo_settings import save_config, load_config, redact
+    from services.logo_providers import list_providers
+    patch = dict(body or {})
+    # Don't overwrite existing keys when frontend sends back masked values
+    for key_field in ("openai_api_key", "ideogram_api_key", "recraft_api_key"):
+        val = patch.get(key_field)
+        if val is not None and ("..." in val or val == ""):
+            patch.pop(key_field, None)
+    allowed = {"openai", "ideogram", "recraft"}
+    if "provider" in patch and patch["provider"] not in allowed:
+        raise HTTPException(400, f"Invalid provider, must be one of {allowed}")
+    if "fallback" in patch and patch["fallback"] not in allowed:
+        raise HTTPException(400, f"Invalid fallback, must be one of {allowed}")
+    save_config(db, patch)
+    return {
+        "config":    redact(load_config(db)),
+        "providers": list_providers(db),
+    }
+
+
+@app.post("/api/admin/logo-provider/test", tags=["admin"])
+async def test_logo_provider(
+    body: dict,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    from services.logo_providers import test_provider
+    name = (body or {}).get("provider", "openai")
+    return await test_provider(name, db=db)
+
+
+# ── Logo Generation (User-facing) ────────────────────────────────────────────
+@app.post("/api/logo/generate", tags=["logo"])
+async def generate_logo(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Submit a logo generation job. Returns generation_id for progress polling."""
+    brand_name = (body.get("brand_name") or "").strip()
+    if not brand_name:
+        raise HTTPException(400, "brand_name is required")
+
+    credits_needed = 3
+    if current_user.credits < credits_needed:
+        raise HTTPException(402, f"积分不足，需要 {credits_needed} 积分，当前余额 {current_user.credits}")
+
+    gen = LogoGeneration(
+        user_id=current_user.id,
+        brand_name=brand_name,
+        industry=body.get("industry", ""),
+        style=body.get("style", "modern"),
+        primary_color=body.get("primary_color", ""),
+        secondary_color=body.get("secondary_color", ""),
+        include_text=body.get("include_text", True),
+        variant_count=min(4, max(1, body.get("variant_count", 3))),
+        status="processing",
+        credits_charged=credits_needed,
+    )
+    db.add(gen)
+    db.commit()
+    db.refresh(gen)
+
+    # Deduct credits
+    current_user.credits -= credits_needed
+    db.add(CreditTransaction(
+        user_id=current_user.id,
+        amount=-credits_needed,
+        reason=f"Logo生成: {brand_name}",
+    ))
+    db.commit()
+
+    # Launch background task
+    import threading
+    thread = threading.Thread(
+        target=_run_logo_generation,
+        args=(gen.id,),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"generation_id": gen.id}
+
+
+def _run_logo_generation(generation_id: int):
+    """Run logo generation in a background thread."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_async_logo_generation(generation_id))
+    finally:
+        loop.close()
+
+
+async def _async_logo_generation(generation_id: int):
+    """Async logo generation pipeline."""
+    from database import SessionLocal
+    from services.logo_settings import load_config
+    from services.logo_providers import generate_via_providers, build_logo_prompt
+
+    db = SessionLocal()
+    try:
+        gen = db.get(LogoGeneration, generation_id)
+        if not gen:
+            return
+
+        cfg = load_config(db)
+
+        # Step 1: Build optimized prompt
+        prompt = build_logo_prompt(
+            brand_name=gen.brand_name,
+            style=gen.style,
+            primary_color=gen.primary_color or "",
+            include_text=gen.include_text,
+            industry=gen.industry or "",
+        )
+        gen.prompt_optimized = prompt
+        db.commit()
+
+        # Step 2: Generate via providers
+        result, provider_name = await generate_via_providers(
+            brand_name=gen.brand_name,
+            prompt=prompt,
+            style=gen.style,
+            include_text=gen.include_text,
+            variant_count=gen.variant_count,
+            primary_color=gen.primary_color or "",
+            db=db,
+        )
+
+        if not result.success:
+            gen.status = "failed"
+            gen.error_msg = result.error
+            db.commit()
+            return
+
+        gen.provider = provider_name
+        gen.variants = [
+            {"index": v["index"], "png_url": v.get("png_url", ""), "svg_url": v.get("svg_url", "")}
+            for v in result.variants
+        ]
+
+        # Step 3: Download and save locally
+        import httpx
+        from services.file_service import ensure_upload_dir, sanitize_filename
+        from datetime import datetime as dt
+        ensure_upload_dir()
+
+        safe_brand = sanitize_filename(gen.brand_name)
+        timestamp = dt.now().strftime("%Y%m%d%H%M%S")
+
+        # Download first variant as main PNG
+        if result.variants:
+            main_url = result.variants[0].get("png_url", "")
+            if main_url:
+                try:
+                    async with httpx.AsyncClient(timeout=60) as client:
+                        resp = await client.get(main_url)
+                        resp.raise_for_status()
+                        png_name = f"{safe_brand}_logo_{timestamp}.png"
+                        png_path = os.path.join(UPLOAD_DIR, png_name)
+                        with open(png_path, "wb") as f:
+                            f.write(resp.content)
+                        gen.png_path = png_path
+                except Exception as e:
+                    print(f"[Logo] PNG download failed: {e}")
+
+        # Step 4: Generate PSD if we have the PNG
+        if gen.png_path and os.path.exists(gen.png_path):
+            try:
+                from PIL import Image
+                from psd_tools import PSDImage
+
+                logo_img = Image.open(gen.png_path).convert("RGBA")
+                W, H = 1024, 1024
+
+                psd = PSDImage.new("RGBA", (W, H))
+
+                # White background layer
+                white_bg = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+                psd.append(psd.create_pixel_layer(white_bg, name="Background White"))
+
+                # Logo layer (centered)
+                logo_resized = logo_img.resize((W, H), Image.LANCZOS)
+                psd.append(psd.create_pixel_layer(logo_resized, name="Logo"))
+
+                # Black background layer (hidden by default)
+                black_bg = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+                layer_black = psd.create_pixel_layer(black_bg, name="Background Black")
+                layer_black.visible = False
+                psd.append(layer_black)
+
+                psd_name = f"{safe_brand}_logo_{timestamp}.psd"
+                psd_path = os.path.join(UPLOAD_DIR, psd_name)
+                psd.save(psd_path)
+                gen.psd_path = psd_path
+            except Exception as e:
+                print(f"[Logo] PSD generation failed: {e}")
+
+        # Step 5: Create brand kit ZIP
+        try:
+            import zipfile
+            zip_name = f"{safe_brand}_brand_kit_{timestamp}.zip"
+            zip_path = os.path.join(UPLOAD_DIR, zip_name)
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                # Add PNG variants
+                if gen.png_path and os.path.exists(gen.png_path):
+                    zf.write(gen.png_path, f"PNG/{os.path.basename(gen.png_path)}")
+                # Download and add all variants
+                if result.variants:
+                    async with httpx.AsyncClient(timeout=60) as client:
+                        for v in result.variants:
+                            url = v.get("png_url", "")
+                            if url:
+                                try:
+                                    resp = await client.get(url)
+                                    resp.raise_for_status()
+                                    vname = f"PNG/variant_{v['index'] + 1}.png"
+                                    zf.writestr(vname, resp.content)
+                                except Exception:
+                                    pass
+                            svg_url = v.get("svg_url", "")
+                            if svg_url:
+                                try:
+                                    resp = await client.get(svg_url)
+                                    resp.raise_for_status()
+                                    vname = f"Vector/variant_{v['index'] + 1}.svg"
+                                    zf.writestr(vname, resp.content)
+                                except Exception:
+                                    pass
+                # Add PSD
+                if gen.psd_path and os.path.exists(gen.psd_path):
+                    zf.write(gen.psd_path, f"PSD_Source/{os.path.basename(gen.psd_path)}")
+                # Add brand guide
+                guide = (
+                    f"# {gen.brand_name} Brand Kit\n\n"
+                    f"Primary Color: {gen.primary_color or 'N/A'}\n"
+                    f"Style: {gen.style}\n"
+                    f"Industry: {gen.industry or 'N/A'}\n\n"
+                    f"## Files\n"
+                    f"- PNG/: Logo variants (transparent background)\n"
+                    f"- Vector/: SVG files (if available)\n"
+                    f"- PSD_Source/: Layered Photoshop file\n"
+                )
+                zf.writestr("BRAND_GUIDE.md", guide)
+            gen.brand_kit_path = zip_path
+        except Exception as e:
+            print(f"[Logo] ZIP packaging failed: {e}")
+
+        # Done!
+        gen.status = "done"
+        gen.completed_at = datetime.utcnow()
+        db.commit()
+        print(f"[Logo] Generation {generation_id} completed via {provider_name}")
+
+    except Exception as e:
+        print(f"[Logo] Generation {generation_id} failed: {e}")
+        try:
+            gen = db.get(LogoGeneration, generation_id)
+            if gen:
+                gen.status = "failed"
+                gen.error_msg = str(e)
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+@app.get("/api/logo/progress/{generation_id}", tags=["logo"])
+async def logo_progress(
+    generation_id: int,
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """SSE endpoint for logo generation progress."""
+    from jose import jwt, JWTError
+    from auth import SECRET_KEY, ALGORITHM
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(401, "Unauthorized")
+    except JWTError:
+        raise HTTPException(401, "Invalid token")
+
+    async def event_stream():
+        import asyncio
+        from database import SessionLocal
+        for attempt in range(120):  # max 10 minutes
+            await asyncio.sleep(3)
+            # Use a fresh session each poll to see background thread's commits
+            poll_db = SessionLocal()
+            try:
+                gen = poll_db.query(LogoGeneration).filter(
+                    LogoGeneration.id == generation_id
+                ).first()
+                if not gen:
+                    yield {"data": json.dumps({"type": "error", "message": "Not found"})}
+                    return
+
+                if gen.status == "done":
+                    yield {"data": json.dumps({
+                        "type": "done",
+                        "variants": gen.variants or [],
+                        "has_png": bool(gen.png_path),
+                        "has_psd": bool(gen.psd_path),
+                        "has_zip": bool(gen.brand_kit_path),
+                        "provider": gen.provider or "",
+                    })}
+                    return
+                elif gen.status == "failed":
+                    yield {"data": json.dumps({
+                        "type": "error",
+                        "message": gen.error_msg or "Generation failed",
+                    })}
+                    return
+                else:
+                    # Estimate progress based on attempt count
+                    percent = min(90, 20 + attempt * 2)
+                    yield {"data": json.dumps({
+                        "type": "progress",
+                        "percent": percent,
+                    })}
+            finally:
+                poll_db.close()
+
+    return EventSourceResponse(event_stream())
+
+
+@app.get("/api/logo/download/{generation_id}", tags=["logo"])
+def download_logo(
+    generation_id: int,
+    format: str = Query("png"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Download generated logo in specified format."""
+    gen = db.query(LogoGeneration).filter(
+        LogoGeneration.id == generation_id,
+        LogoGeneration.user_id == current_user.id,
+    ).first()
+    if not gen:
+        raise HTTPException(404, "Logo generation not found")
+    if gen.status != "done":
+        raise HTTPException(400, "Logo generation not completed")
+
+    if format == "png" and gen.png_path and os.path.exists(gen.png_path):
+        return FileResponse(
+            path=gen.png_path,
+            filename=os.path.basename(gen.png_path),
+            media_type="image/png",
+        )
+    elif format == "psd" and gen.psd_path and os.path.exists(gen.psd_path):
+        return FileResponse(
+            path=gen.psd_path,
+            filename=os.path.basename(gen.psd_path),
+            media_type="application/octet-stream",
+        )
+    elif format == "zip" and gen.brand_kit_path and os.path.exists(gen.brand_kit_path):
+        return FileResponse(
+            path=gen.brand_kit_path,
+            filename=os.path.basename(gen.brand_kit_path),
+            media_type="application/zip",
+        )
+    else:
+        raise HTTPException(404, f"File not available for format: {format}")
+
+
+@app.get("/api/logo/history", tags=["logo"])
+def logo_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+):
+    """List user's logo generation history."""
+    q = db.query(LogoGeneration).filter(LogoGeneration.user_id == current_user.id)
+    total = q.count()
+    items = (
+        q.order_by(LogoGeneration.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": g.id,
+                "brand_name": g.brand_name,
+                "style": g.style,
+                "status": g.status,
+                "provider": g.provider,
+                "variants": g.variants,
+                "has_png": bool(g.png_path),
+                "has_psd": bool(g.psd_path),
+                "has_zip": bool(g.brand_kit_path),
+                "created_at": g.created_at.isoformat() if g.created_at else None,
+            }
+            for g in items
+        ],
     }
 
 

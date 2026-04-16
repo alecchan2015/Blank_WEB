@@ -69,6 +69,11 @@ class KnowledgeOut(BaseModel):
     content: str
     created_at: datetime
     is_active: bool
+    knowledge_type: Optional[str] = "general"
+    source: Optional[str] = None
+    source_file: Optional[str] = None
+    quality_score: Optional[int] = 7
+    tags: Optional[str] = None
 
     class Config:
         from_attributes = True

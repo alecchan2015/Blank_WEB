@@ -41,6 +41,11 @@ class AgentKnowledge(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    knowledge_type = Column(String(50), default="general")  # framework, case_study, market_data, methodology, industry_report, general
+    source = Column(String(100), nullable=True)  # "seed", "upload", "crawl", "manual"
+    source_file = Column(String(300), nullable=True)  # original filename
+    quality_score = Column(Integer, default=7)  # 1-10
+    tags = Column(String(500), nullable=True)  # comma-separated tags
 
 
 class Task(Base):
@@ -113,3 +118,31 @@ class CreditTransaction(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="credit_transactions")
+
+
+class LogoGeneration(Base):
+    __tablename__ = "logo_generations"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    brand_name = Column(String(200), nullable=False)
+    industry = Column(String(100), nullable=True)
+    style = Column(String(50), default="modern")
+    primary_color = Column(String(20), nullable=True)
+    secondary_color = Column(String(20), nullable=True)
+    include_text = Column(Boolean, default=True)
+    variant_count = Column(Integer, default=3)
+    prompt_optimized = Column(Text, nullable=True)
+    status = Column(String(20), default="processing")  # processing, done, failed
+    provider = Column(String(50), nullable=True)
+    error_msg = Column(Text, nullable=True)
+    # Result URLs (stored as JSON list)
+    variants = Column(JSON, nullable=True)  # [{index, png_url, svg_url}]
+    # File paths for local storage
+    png_path = Column(String(500), nullable=True)
+    psd_path = Column(String(500), nullable=True)
+    brand_kit_path = Column(String(500), nullable=True)
+    credits_charged = Column(Integer, default=3)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", backref="logo_generations")
