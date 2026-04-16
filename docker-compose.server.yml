@@ -1,0 +1,46 @@
+version: '3.9'
+
+# Production compose for Tencent Cloud (CentOS 7, Docker 24)
+# Port mapping avoids conflicts with existing containers on the host:
+#   frontend  → host:8090  (aichat-web occupies :80)
+#   backend   → host:8001  (avoids :8000 if anything else uses it)
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: brand-consultant-backend
+    container_name: brand_consultant_backend
+    restart: always
+    environment:
+      - DATABASE_URL=sqlite:///./brand_consultant.db
+      - SECRET_KEY=${SECRET_KEY:-change_me_in_production_please}
+      - UPLOAD_DIR=/app/uploads
+      - PPT_PROVIDER=${PPT_PROVIDER:-local}
+      - PPT_FALLBACK=${PPT_FALLBACK:-local}
+    volumes:
+      - ./data/brand_consultant.db:/app/brand_consultant.db
+      - ./data/uploads:/app/uploads
+    ports:
+      - "8001:8000"
+    networks:
+      - brand_consultant_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: brand-consultant-frontend
+    container_name: brand_consultant_frontend
+    restart: always
+    ports:
+      - "8090:80"
+    depends_on:
+      - backend
+    networks:
+      - brand_consultant_net
+
+networks:
+  brand_consultant_net:
+    driver: bridge
