@@ -228,8 +228,26 @@ class JimengPosterProvider(BasePosterProvider):
         return await self._generate_ark(prompt, size, variant_count, model, api_key)
 
     async def _generate_ark(self, prompt, size, variant_count, model, api_key):
+        # Aggressive sanitization — users often paste keys with surrounding
+        # whitespace, quotes, or mask artifacts.
+        api_key = (api_key or "").strip().strip('"').strip("'")
         if not api_key:
-            return PosterResult(success=False, provider=self.name, error="即梦 API key not configured")
+            return PosterResult(success=False, provider=self.name,
+                                 error="即梦 API key 未配置")
+        if "..." in api_key:
+            return PosterResult(success=False, provider=self.name,
+                                 error="API key 似乎是脱敏占位符（含 ...），请重新粘贴原始密钥后再保存")
+
+        # ARK API key format check — should look like an ASCII token;
+        # warn early if user entered something that looks wrong.
+        if any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_."
+               for c in api_key):
+            return PosterResult(success=False, provider=self.name,
+                                 error=(
+                                     "API key 含非法字符（空格/中文等）。"
+                                     "请到 https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey "
+                                     "复制正确的 ARK API Key（不是 AK/SK，也不是账户密码）"
+                                 ))
 
         w, h = size
         # Seedream 4.0 supports native portrait 9:16 (1152x2048, 1536x2560, 2304x4096)
@@ -252,6 +270,15 @@ class JimengPosterProvider(BasePosterProvider):
                         headers={"Authorization": f"Bearer {api_key}"},
                         json={"model": model, "prompt": prompt, "size": ark_size, "n": 1},
                     )
+                    if r.status_code == 401:
+                        # Authoritative message for the user
+                        return PosterResult(success=False, provider=self.name, error=(
+                            f"[401] ARK 鉴权失败。"
+                            f"请确认使用的是 ARK API Key（格式通常为 UUID 或以 `sk-` 开头），"
+                            f"而不是火山引擎账户的 Access Key / Secret Key。"
+                            f"获取地址: https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey  "
+                            f"[原始响应] {r.text[:200]}"
+                        ))
                     if r.status_code >= 400:
                         return PosterResult(success=False, provider=self.name,
                                              error=f"[{r.status_code}] {r.text[:300]}")

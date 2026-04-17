@@ -2902,11 +2902,18 @@ def update_poster_provider_config(
     from services.poster_settings import save_config, load_config, redact
     from services.poster_providers import list_providers
     patch = dict(body or {})
+    # Strip whitespace/quotes + drop masked placeholders
     for key_field in ("openai_api_key", "flux_api_key", "jimeng_api_key",
-                      "ideogram_api_key", "removebg_api_key"):
+                      "ideogram_api_key", "removebg_api_key",
+                      "jimeng_access_key", "jimeng_secret_key"):
         val = patch.get(key_field)
-        if val is not None and ("..." in val or val == ""):
+        if val is None:
+            continue
+        cleaned = str(val).strip().strip('"').strip("'")
+        if ("..." in cleaned) or cleaned == "":
             patch.pop(key_field, None)
+        else:
+            patch[key_field] = cleaned
     allowed = {"openai", "flux", "jimeng"}
     if "provider" in patch and patch["provider"] not in allowed:
         raise HTTPException(400, f"Invalid provider, must be one of {allowed}")

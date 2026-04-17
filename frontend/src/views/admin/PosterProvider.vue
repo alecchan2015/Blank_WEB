@@ -136,10 +136,16 @@
           <el-input
             v-model="form.jimeng_api_key"
             type="password" show-password
-            :placeholder="form.jimeng_api_key_set ? '已保存，留空则不修改' : 'jimeng-...'"
+            :placeholder="form.jimeng_api_key_set ? '已保存，留空则不修改' : '请粘贴 ARK API Key'"
             style="width:420px"
           />
-          <div class="hint">中文场景理解强，适合节气/古风海报</div>
+          <div class="hint">
+            需要使用 <b>ARK API Key</b>（不是火山引擎账户的 AK/SK）。获取地址：
+            <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey" target="_blank">
+              ark console → API Key 管理
+            </a>
+            。中文场景理解强，适合节气/古风海报。
+          </div>
         </el-form-item>
         <el-form-item label="即梦模型">
           <el-select
