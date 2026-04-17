@@ -30,6 +30,11 @@ class User(Base):
     # Registration approval workflow
     pending_approval = Column(Boolean, default=False)
 
+    # Membership (VIP / VVIP / VVVIP tiers)
+    tier                   = Column(String(20), default="regular", index=True)  # regular|vip|vvip|vvvip
+    tier_expires_at        = Column(DateTime, nullable=True)
+    last_monthly_grant_at  = Column(DateTime, nullable=True)  # when we last auto-granted monthly credits
+
     tasks = relationship("Task", back_populates="user")
     credit_transactions = relationship("CreditTransaction", back_populates="user")
 
@@ -55,6 +60,61 @@ class AuthRateLimit(Base):
     bucket = Column(String(150), nullable=False, index=True)  # e.g. "otp:email:xxx@x.com"
     window_start = Column(DateTime, nullable=False)
     count = Column(Integer, default=0)
+
+
+class MembershipPlan(Base):
+    """VIP/VVIP/VVVIP subscription plans.
+
+    Admins create plans with tier, duration, price, credits, and feature set.
+    A plan represents a single purchasable package (e.g. "VIP Monthly").
+    """
+    __tablename__ = "membership_plans"
+    id                 = Column(Integer, primary_key=True)
+    tier               = Column(String(20), nullable=False, index=True)  # vip | vvip | vvvip
+    name               = Column(String(100), nullable=False)
+    duration_days      = Column(Integer, nullable=False)
+    price_cents        = Column(Integer, nullable=False)   # stored in fen/cents
+    price_currency     = Column(String(10), default="CNY")
+    activation_credits = Column(Integer, default=0)        # granted immediately on activation
+    monthly_credits    = Column(Integer, default=0)        # granted each month during active period
+    features           = Column(JSON, default=list)        # ["gamma_ppt","hires_logo",...]
+    description        = Column(Text, nullable=True)
+    is_active          = Column(Boolean, default=True)
+    sort_order         = Column(Integer, default=0)
+    created_at         = Column(DateTime, default=datetime.utcnow)
+
+
+class PaymentOrder(Base):
+    """Membership purchase orders.
+
+    Status lifecycle:
+        pending            - order created, awaiting user action
+        awaiting_confirm   - user clicked "I paid" (manual) or webhook pending
+        paid               - confirmed and tier activated
+        canceled           - user or admin canceled
+        refunded           - admin refunded (tier downgraded)
+        failed             - external provider reported failure
+    """
+    __tablename__ = "payment_orders"
+    id                = Column(Integer, primary_key=True)
+    order_no          = Column(String(40), unique=True, index=True, nullable=False)
+    user_id           = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    plan_id           = Column(Integer, ForeignKey("membership_plans.id"), nullable=False)
+    channel           = Column(String(20), nullable=False)  # stripe | alipay | wechat | manual
+    amount_cents      = Column(Integer, nullable=False)
+    currency          = Column(String(10), default="CNY")
+    status            = Column(String(20), default="pending", index=True)
+    external_order_id = Column(String(200), nullable=True)
+    external_metadata = Column(JSON, nullable=True)
+    paid_at           = Column(DateTime, nullable=True)
+    canceled_at       = Column(DateTime, nullable=True)
+    refunded_at       = Column(DateTime, nullable=True)
+    admin_notes       = Column(Text, nullable=True)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    expires_at        = Column(DateTime, nullable=False)   # order validity (24h default)
+
+    user = relationship("User")
+    plan = relationship("MembershipPlan")
 
 
 class LLMConfig(Base):

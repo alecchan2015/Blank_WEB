@@ -127,6 +127,23 @@ export const adminAPI = {
   rejectUser:         (id) => api.post(`/admin/users/${id}/reject`),
   getUserDetail:      (id) => api.get(`/admin/users/${id}`),
   updateUserProfile:  (id, data) => api.put(`/admin/users/${id}/profile`, data),
+  adjustUserTier:     (id, data) => api.put(`/admin/users/${id}/tier`, data),
+
+  // ─── Membership plans + config ───
+  getPlans:             () => api.get('/admin/membership/plans'),
+  createPlan:           (data) => api.post('/admin/membership/plans', data),
+  updatePlan:           (id, data) => api.put(`/admin/membership/plans/${id}`, data),
+  deletePlan:           (id) => api.delete(`/admin/membership/plans/${id}`),
+  getMembershipConfig:  () => api.get('/admin/membership/config'),
+  saveMembershipConfig: (data) => api.put('/admin/membership/config', data),
+
+  // ─── Payment orders + providers ───
+  getOrders:            (status) => api.get('/admin/payment/orders', { params: status ? { status } : {} }),
+  confirmOrder:         (orderNo) => api.post(`/admin/payment/orders/${orderNo}/confirm`),
+  refundOrder:          (orderNo, notes) => api.post(`/admin/payment/orders/${orderNo}/refund`, { notes: notes || '' }),
+  cancelOrderAdmin:     (orderNo) => api.post(`/admin/payment/orders/${orderNo}/cancel`),
+  getPaymentProviders:  () => api.get('/admin/payment/providers'),
+  savePaymentProviders: (data) => api.put('/admin/payment/providers', data),
 }
 
 // Logo
@@ -143,6 +160,23 @@ export const logoAPI = {
 // Agents meta
 export const agentsAPI = {
   list: () => api.get('/agents'),
+}
+
+// Membership (user-facing)
+export const membershipAPI = {
+  plans:        () => api.get('/membership/plans'),
+  me:           () => api.get('/membership/me'),
+  publicConfig: () => api.get('/membership/config/public'),
+}
+
+// Payment (user-facing)
+export const paymentAPI = {
+  createOrder:    (data) => api.post('/payment/orders', data),
+  myOrders:       () => api.get('/payment/orders'),
+  getOrder:       (orderNo) => api.get(`/payment/orders/${orderNo}`),
+  cancelOrder:    (orderNo) => api.post(`/payment/orders/${orderNo}/cancel`),
+  markPaying:     (orderNo) => api.post(`/payment/orders/${orderNo}/mark-paying`),
+  publicChannels: () => api.get('/payment/channels/public'),
 }
 
 export default api

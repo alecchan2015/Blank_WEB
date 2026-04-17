@@ -24,6 +24,15 @@
         <el-menu-item index="/admin/auth">
           <el-icon><Lock /></el-icon><span>注册策略</span>
         </el-menu-item>
+        <el-menu-item index="/admin/membership">
+          <el-icon><Star /></el-icon><span>套餐管理</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/orders">
+          <el-icon><Tickets /></el-icon><span>订单管理</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/payment-providers">
+          <el-icon><CreditCard /></el-icon><span>支付渠道</span>
+        </el-menu-item>
         <el-menu-item index="/admin/tasks">
           <el-icon><List /></el-icon><span>任务记录</span>
         </el-menu-item>

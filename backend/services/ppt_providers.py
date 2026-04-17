@@ -265,16 +265,25 @@ async def generate_via_providers(
     content: str,
     file_path: str,
     db=None,
+    force_local: bool = False,
 ) -> tuple[str, str]:
     """
     Try primary provider, then fallback, then hard-fall-back to local.
     Config is loaded from the DB (system_settings.ppt_provider_config), with
     env vars as the deployment-time default. Returns the path + provider name.
+
+    `force_local=True` short-circuits to the local python-pptx renderer
+    (used for membership feature gating — non-VIP users can't access Gamma).
     """
     from services.ppt_settings import load_config
     cfg = load_config(db)
     primary_name  = cfg.get("provider") or "local"
     fallback_name = cfg.get("fallback") or "local"
+
+    if force_local:
+        print("[PPTProvider] force_local=True (non-VIP gate) → using local renderer")
+        primary_name = "local"
+        fallback_name = "local"
 
     chain = []
     for nm in (primary_name, fallback_name, "local"):

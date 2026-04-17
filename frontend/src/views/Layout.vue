@@ -18,6 +18,18 @@
           <el-icon><PictureFilled /></el-icon>
           <span>Logo 生成</span>
         </el-menu-item>
+        <el-menu-item index="/membership">
+          <el-icon><Star /></el-icon>
+          <span>会员升级</span>
+          <el-tag v-if="store.user?.tier && store.user.tier !== 'regular'"
+            :type="tierTagType(store.user.tier)" size="small" effect="dark" style="margin-left:auto">
+            {{ store.user.tier.toUpperCase() }}
+          </el-tag>
+        </el-menu-item>
+        <el-menu-item index="/orders">
+          <el-icon><Tickets /></el-icon>
+          <span>我的订单</span>
+        </el-menu-item>
       </el-menu>
       <div class="sidebar-bottom">
         <div class="credits-badge">
@@ -54,6 +66,10 @@ import { ElMessageBox } from 'element-plus'
 const route = useRoute()
 const router = useRouter()
 const store = useUserStore()
+
+function tierTagType(t) {
+  return { vip: 'primary', vvip: 'warning', vvvip: 'danger' }[t] || ''
+}
 
 async function logout() {
   await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })

@@ -250,12 +250,16 @@ async def generate_pptx_file(
     brand_name: str,
     content: str,
     db=None,
+    user=None,
 ) -> tuple[str, str]:
     """Generate professional PowerPoint using the multi-provider factory.
 
     Primary/fallback providers are selected by env (PPT_PROVIDER / PPT_FALLBACK);
     the chain always ends in the local python-pptx renderer so generation never
     hard-fails. See services/ppt_providers.py.
+
+    `user` is used for membership feature gating — non-VIP users are forced
+    to the local renderer regardless of admin provider config.
     """
     ensure_upload_dir()
     from services.ppt_providers import generate_via_providers
@@ -267,6 +271,16 @@ async def generate_pptx_file(
     file_name = f"{safe_brand}_{agent_name}_{timestamp}.pptx"
     file_path = os.path.join(UPLOAD_DIR, file_name)
 
+    # Membership gate — non-VIP users cannot use Gamma
+    force_local = False
+    if user is not None and db is not None:
+        try:
+            from services.membership_service import check_feature_access
+            if not check_feature_access(db, user, "gamma_ppt"):
+                force_local = True
+        except Exception:
+            pass
+
     await generate_via_providers(
         task_id=task_id,
         agent_type=agent_type,
@@ -274,6 +288,7 @@ async def generate_pptx_file(
         content=content,
         file_path=file_path,
         db=db,
+        force_local=force_local,
     )
     return file_path, file_name
 

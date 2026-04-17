@@ -30,6 +30,9 @@ class UserOut(BaseModel):
     industry: Optional[str] = None
     position: Optional[str] = None
     company_size: Optional[str] = None
+    # Membership fields
+    tier: Optional[str] = "regular"
+    tier_expires_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -230,3 +233,120 @@ class RegistrationResponse(BaseModel):
     user: Optional[UserOut] = None
     pending_approval: bool = False
     message: Optional[str] = None
+
+
+# ─── Membership schemas ────────────────────────────────────────────────────
+class MembershipPlanOut(BaseModel):
+    id: int
+    tier: str
+    name: str
+    duration_days: int
+    price_cents: int
+    price_currency: str
+    activation_credits: int
+    monthly_credits: int
+    features: List[str]
+    description: Optional[str] = None
+    is_active: bool
+    sort_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class MembershipPlanCreate(BaseModel):
+    tier: str
+    name: str
+    duration_days: int
+    price_cents: int
+    price_currency: Optional[str] = "CNY"
+    activation_credits: Optional[int] = 0
+    monthly_credits: Optional[int] = 0
+    features: Optional[List[str]] = []
+    description: Optional[str] = None
+    is_active: Optional[bool] = True
+    sort_order: Optional[int] = 0
+
+
+class MembershipPlanUpdate(BaseModel):
+    tier: Optional[str] = None
+    name: Optional[str] = None
+    duration_days: Optional[int] = None
+    price_cents: Optional[int] = None
+    price_currency: Optional[str] = None
+    activation_credits: Optional[int] = None
+    monthly_credits: Optional[int] = None
+    features: Optional[List[str]] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+class MembershipMeOut(BaseModel):
+    tier: str
+    tier_label: str
+    tier_expires_at: Optional[datetime] = None
+    days_remaining: Optional[int] = None
+    features: List[str]
+    feature_labels: dict
+    support_info: Optional[dict] = None
+
+
+class AdminTierAdjustReq(BaseModel):
+    tier: str
+    days: Optional[int] = None          # set expiry = now + days; ignored if tier == regular
+    expires_at: Optional[datetime] = None
+    reason: Optional[str] = None
+
+
+# ─── Payment schemas ───────────────────────────────────────────────────────
+class PaymentOrderCreate(BaseModel):
+    plan_id: int
+    channel: str                        # stripe | alipay | wechat | manual
+
+
+class PaymentOrderOut(BaseModel):
+    id: int
+    order_no: str
+    user_id: int
+    plan_id: int
+    channel: str
+    amount_cents: int
+    currency: str
+    status: str
+    paid_at: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    refunded_at: Optional[datetime] = None
+    created_at: datetime
+    expires_at: datetime
+    plan: Optional[MembershipPlanOut] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentOrderCreateResponse(BaseModel):
+    order: PaymentOrderOut
+    payment_url: Optional[str] = None
+    qr_code_url: Optional[str] = None
+    message: Optional[str] = ""
+
+
+class PaymentRefundReq(BaseModel):
+    notes: Optional[str] = ""
+
+
+# ─── Admin payment provider schemas ────────────────────────────────────────
+class PaymentProvidersPatch(BaseModel):
+    stripe: Optional[dict] = None
+    alipay: Optional[dict] = None
+    wechat: Optional[dict] = None
+    manual: Optional[dict] = None
+
+
+class MembershipConfigPatch(BaseModel):
+    grace_period_days: Optional[int] = None
+    tier_labels: Optional[dict] = None
+    tier_features: Optional[dict] = None
+    feature_labels: Optional[dict] = None
+    support_info: Optional[dict] = None

@@ -52,6 +52,15 @@ async def get_current_user(
     user = db.query(User).filter(User.username == username).first()
     if user is None or not user.is_active:
         raise credentials_exception
+
+    # Lazy membership maintenance: expiry + monthly credit grant.
+    # Kept inside auth.py (not main.py) so ALL authenticated requests pass through.
+    try:
+        from services.membership_service import lazy_check
+        lazy_check(db, user)
+    except Exception:                                                   # noqa: BLE001
+        pass  # never break auth over maintenance errors
+
     return user
 
 

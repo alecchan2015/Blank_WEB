@@ -31,6 +31,14 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="会员等级" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag size="small" :type="tierTagType(row.tier)" effect="dark">{{ tierDisplay(row.tier) }}</el-tag>
+          <div v-if="row.tier !== 'regular' && row.tier_expires_at" class="hint-text">
+            至 {{ formatShortDate(row.tier_expires_at) }}
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="角色" width="80" align="center">
         <template #default="{ row }">
           <el-tag :type="row.role === 'admin' ? 'danger' : 'primary'" size="small">{{ row.role === 'admin' ? '管理员' : '用户' }}</el-tag>
@@ -50,10 +58,11 @@
       <el-table-column label="注册时间" width="120">
         <template #default="{ row }">{{ new Date(row.created_at).toLocaleDateString('zh-CN') }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="240" align="center">
+      <el-table-column label="操作" width="300" align="center">
         <template #default="{ row }">
           <el-button size="small" link @click="openProfileDialog(row)">详情</el-button>
           <el-button size="small" link @click="openCreditsDialog(row)">积分</el-button>
+          <el-button size="small" link type="warning" @click="openTierDialog(row)">等级</el-button>
           <el-button size="small" link :type="row.is_active ? 'warning' : 'success'"
             @click="toggleStatus(row)">{{ row.is_active ? '禁用' : '启用' }}</el-button>
         </template>
@@ -110,6 +119,35 @@
       <template #footer>
         <el-button @click="creditsVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveCredits">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Tier Adjust Dialog -->
+    <el-dialog v-model="tierVisible" title="调整会员等级" width="440px">
+      <div v-if="editUser" class="tier-info">
+        当前等级：<el-tag :type="tierTagType(editUser.tier)" effect="dark">{{ tierDisplay(editUser.tier) }}</el-tag>
+        <span v-if="editUser.tier_expires_at"> · 原到期时间 {{ formatShortDate(editUser.tier_expires_at) }}</span>
+      </div>
+      <el-form :model="tierForm" label-width="90px" style="margin-top:16px">
+        <el-form-item label="新等级">
+          <el-select v-model="tierForm.tier" style="width:100%">
+            <el-option label="普通用户" value="regular" />
+            <el-option label="VIP" value="vip" />
+            <el-option label="VVIP" value="vvip" />
+            <el-option label="VVVIP" value="vvvip" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="tierForm.tier !== 'regular'" label="有效天数">
+          <el-input-number v-model="tierForm.days" :min="1" :max="3650" style="width:100%" />
+          <div class="hint-text">从今天起计算，到期自动降级为普通用户</div>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="tierForm.reason" placeholder="调整原因（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="tierVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveTier">确认</el-button>
       </template>
     </el-dialog>
 
@@ -172,11 +210,22 @@ const saving = ref(false)
 
 const creditsVisible = ref(false)
 const profileVisible = ref(false)
+const tierVisible = ref(false)
 const editUser = ref(null)
 const creditsForm = ref({ credits: 0, reason: '' })
 const profileForm = ref({
   phone: '', company_name: '', industry: '', position: '', company_size: '',
 })
+const tierForm = ref({ tier: 'regular', days: 30, reason: '' })
+
+const TIER_LABELS = { regular: '普通', vip: 'VIP', vvip: 'VVIP', vvvip: 'VVVIP' }
+function tierDisplay(t) { return TIER_LABELS[t] || '普通' }
+function tierTagType(t) {
+  return { regular: 'info', vip: 'primary', vvip: 'warning', vvvip: 'danger' }[t] || 'info'
+}
+function formatShortDate(s) {
+  return s ? new Date(s).toLocaleDateString('zh-CN') : ''
+}
 
 function providerLabel(p) {
   return {
@@ -211,6 +260,35 @@ function openProfileDialog(user) {
     company_size: user.company_size || '',
   }
   profileVisible.value = true
+}
+
+function openTierDialog(user) {
+  editUser.value = user
+  tierForm.value = {
+    tier: user.tier || 'regular',
+    days: 30,
+    reason: '',
+  }
+  tierVisible.value = true
+}
+
+async function saveTier() {
+  saving.value = true
+  try {
+    const payload = {
+      tier: tierForm.value.tier,
+      days: tierForm.value.tier === 'regular' ? null : tierForm.value.days,
+      reason: tierForm.value.reason || null,
+    }
+    await adminAPI.adjustUserTier(editUser.value.id, payload)
+    ElMessage.success('等级已更新')
+    tierVisible.value = false
+    await loadUsers()
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function saveCredits() {

@@ -4,7 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +14,10 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from database import Base, engine, get_db
-from models import User, LLMConfig, AgentKnowledge, Task, TaskResult, CreditTransaction, TokenUsage, LogoGeneration
+from models import (
+    User, LLMConfig, AgentKnowledge, Task, TaskResult, CreditTransaction,
+    TokenUsage, LogoGeneration, MembershipPlan, PaymentOrder,
+)
 from auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, get_current_admin
@@ -30,6 +33,10 @@ from schemas import (
     AuthPublicConfig, AuthRegistrationConfigPatch,
     SmsProviderPatch, EmailProviderPatch, GoogleOAuthPatch,
     ProviderTestReq, RegistrationResponse,
+    MembershipPlanOut, MembershipPlanCreate, MembershipPlanUpdate,
+    MembershipMeOut, AdminTierAdjustReq,
+    PaymentOrderCreate, PaymentOrderOut, PaymentOrderCreateResponse,
+    PaymentRefundReq, PaymentProvidersPatch, MembershipConfigPatch,
 )
 from services.agent_service import run_multi_agent, AGENT_META
 from services.file_service import (
@@ -77,11 +84,42 @@ async def lifespan(app: FastAPI):
                 "position":          "VARCHAR(100)",
                 "company_size":      "VARCHAR(50)",
                 "pending_approval":  "BOOLEAN DEFAULT 0",
+                # Membership columns
+                "tier":                   "VARCHAR(20) DEFAULT 'regular'",
+                "tier_expires_at":        "DATETIME",
+                "last_monthly_grant_at":  "DATETIME",
             }
             for col, dtype in user_migrations.items():
                 if col not in user_cols:
                     conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {dtype}"))
             conn.commit()
+
+    # Seed default membership plans if the table is empty
+    db = next(get_db())
+    try:
+        if db.query(MembershipPlan).count() == 0:
+            DEFAULT_PLANS = [
+                # (tier, name, days, price_cents, activation_credits, monthly_credits, features, sort_order)
+                ("vip",   "VIP 月度",   30,   9900,  1000,  3000, ["gamma_ppt","hires_logo"], 10),
+                ("vip",   "VIP 年度",   365,  99900, 3000,  3000, ["gamma_ppt","hires_logo"], 11),
+                ("vvip",  "VVIP 月度",  30,   29900, 3000, 10000, ["gamma_ppt","hires_logo","google_image"], 20),
+                ("vvip",  "VVIP 年度",  365, 299900, 10000,10000, ["gamma_ppt","hires_logo","google_image"], 21),
+                ("vvvip", "VVVIP 月度", 30,   99900, 10000,30000, ["gamma_ppt","hires_logo","google_image","priority_queue","priority_support"], 30),
+                ("vvvip", "VVVIP 年度", 365, 999900, 30000,30000, ["gamma_ppt","hires_logo","google_image","priority_queue","priority_support"], 31),
+            ]
+            for tier, name, days, price, act_c, mon_c, feats, order in DEFAULT_PLANS:
+                db.add(MembershipPlan(
+                    tier=tier, name=name, duration_days=days,
+                    price_cents=price, price_currency="CNY",
+                    activation_credits=act_c, monthly_credits=mon_c,
+                    features=feats, is_active=True, sort_order=order,
+                ))
+            db.commit()
+            print(f"[seed] Inserted {len(DEFAULT_PLANS)} default membership plans")
+    except Exception as exc:
+        print(f"[seed] plan seed error: {exc}")
+    finally:
+        db.close()
 
     # Seed default admin (update existing or create new)
     db = next(get_db())
@@ -442,6 +480,145 @@ async def google_callback(
 
 
 # ─────────────────────────────────────────────
+# Membership (user-facing)
+# ─────────────────────────────────────────────
+
+def _days_remaining(expires_at):
+    if not expires_at:
+        return None
+    delta = expires_at - datetime.utcnow()
+    return max(0, delta.days + (1 if delta.seconds > 0 else 0))
+
+
+@app.get("/api/membership/plans", response_model=List[MembershipPlanOut], tags=["membership"])
+def list_active_plans(db: Session = Depends(get_db)):
+    """Return all active plans (public, sorted)."""
+    return (
+        db.query(MembershipPlan)
+        .filter(MembershipPlan.is_active == True)
+        .order_by(MembershipPlan.sort_order.asc(), MembershipPlan.price_cents.asc())
+        .all()
+    )
+
+
+@app.get("/api/membership/me", response_model=MembershipMeOut, tags=["membership"])
+def my_membership(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from services.payment_settings import load_membership_config
+    cfg = load_membership_config(db)
+    tier = current_user.tier or "regular"
+    features = cfg.get("tier_features", {}).get(tier, [])
+    support = cfg.get("support_info", {}).get(tier) if tier != "regular" else None
+    return {
+        "tier":            tier,
+        "tier_label":      cfg.get("tier_labels", {}).get(tier, tier),
+        "tier_expires_at": current_user.tier_expires_at,
+        "days_remaining":  _days_remaining(current_user.tier_expires_at),
+        "features":        features,
+        "feature_labels":  cfg.get("feature_labels", {}),
+        "support_info":    support,
+    }
+
+
+@app.get("/api/membership/config/public", tags=["membership"])
+def public_membership_config(db: Session = Depends(get_db)):
+    """Non-sensitive tier/feature labels for frontend display."""
+    from services.payment_settings import load_membership_config
+    cfg = load_membership_config(db)
+    return {
+        "tier_labels":    cfg.get("tier_labels", {}),
+        "tier_features":  cfg.get("tier_features", {}),
+        "feature_labels": cfg.get("feature_labels", {}),
+    }
+
+
+# ─────────────────────────────────────────────
+# Payment (user-facing)
+# ─────────────────────────────────────────────
+
+@app.post("/api/payment/orders", response_model=PaymentOrderCreateResponse, tags=["payment"])
+def create_payment_order(
+    body: PaymentOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from services.payment_service import create_order
+    res = create_order(db, current_user, body.plan_id, body.channel)
+    order = res["order"]
+    return {
+        "order":       order,
+        "payment_url": res.get("payment_url"),
+        "qr_code_url": res.get("qr_code_url"),
+        "message":     res.get("message", ""),
+    }
+
+
+@app.get("/api/payment/orders", response_model=List[PaymentOrderOut], tags=["payment"])
+def list_my_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(PaymentOrder)
+        .filter(PaymentOrder.user_id == current_user.id)
+        .order_by(PaymentOrder.created_at.desc())
+        .limit(100)
+        .all()
+    )
+
+
+@app.get("/api/payment/orders/{order_no}", response_model=PaymentOrderOut, tags=["payment"])
+def get_my_order(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = db.query(PaymentOrder).filter(
+        PaymentOrder.order_no == order_no,
+        PaymentOrder.user_id == current_user.id,
+    ).first()
+    if not order:
+        raise HTTPException(404, "订单不存在")
+    return order
+
+
+@app.post("/api/payment/orders/{order_no}/cancel", response_model=PaymentOrderOut, tags=["payment"])
+def cancel_my_order(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from services.payment_service import cancel
+    return cancel(db, current_user, order_no)
+
+
+@app.post("/api/payment/orders/{order_no}/mark-paying", response_model=PaymentOrderOut, tags=["payment"])
+def mark_my_order_paying(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """User clicked 'I paid' (manual channel). Order moves to awaiting_confirm."""
+    from services.payment_service import mark_paying
+    return mark_paying(db, current_user, order_no)
+
+
+@app.get("/api/payment/channels/public", tags=["payment"])
+def public_payment_channels(db: Session = Depends(get_db)):
+    """List of available payment channels for the frontend."""
+    from services.payment_settings import load_payment_config
+    from services import payment_providers
+    cfg = load_payment_config(db)
+    enabled = payment_providers.available_channels(cfg)
+    return {
+        "enabled":      enabled,
+        "descriptions": {ch: (cfg.get(ch, {}).get("description") or "") for ch in ("stripe", "alipay", "wechat", "manual")},
+    }
+
+
+# ─────────────────────────────────────────────
 # Task Routes
 # ─────────────────────────────────────────────
 
@@ -656,7 +833,7 @@ async def stream_task(
                     # PPTX: for all agent types (AI-powered, async)
                     try:
                         pptx_path, pptx_name = await generate_pptx_file(
-                            task.id, agent_type, task.brand_name or "品牌", full_content, db=db
+                            task.id, agent_type, task.brand_name or "品牌", full_content, db=db, user=user,
                         )
                         pptx_result = TaskResult(
                             task_id=task.id,
@@ -1666,6 +1843,206 @@ def admin_update_google_oauth(
     if val and "..." in val:
         patch.pop("client_secret")
     return redact_google(save_google_config(db, patch))
+
+
+# ─────────────────────────────────────────────
+# Admin: Membership plans
+# ─────────────────────────────────────────────
+
+@app.get("/api/admin/membership/plans", response_model=List[MembershipPlanOut], tags=["admin"])
+def admin_list_plans(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    return (
+        db.query(MembershipPlan)
+        .order_by(MembershipPlan.tier.asc(), MembershipPlan.sort_order.asc(), MembershipPlan.duration_days.asc())
+        .all()
+    )
+
+
+@app.post("/api/admin/membership/plans", response_model=MembershipPlanOut, tags=["admin"])
+def admin_create_plan(
+    body: MembershipPlanCreate,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    if body.tier not in ("vip", "vvip", "vvvip"):
+        raise HTTPException(400, "tier 必须是 vip / vvip / vvvip")
+    plan = MembershipPlan(**body.model_dump())
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+@app.put("/api/admin/membership/plans/{plan_id}", response_model=MembershipPlanOut, tags=["admin"])
+def admin_update_plan(
+    plan_id: int,
+    body: MembershipPlanUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    plan = db.query(MembershipPlan).filter(MembershipPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(404, "套餐不存在")
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(plan, k, v)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+@app.delete("/api/admin/membership/plans/{plan_id}", tags=["admin"])
+def admin_delete_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    """Soft-delete by setting is_active=False. Hard delete only if no orders reference it."""
+    plan = db.query(MembershipPlan).filter(MembershipPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(404, "套餐不存在")
+    has_orders = db.query(PaymentOrder).filter(PaymentOrder.plan_id == plan_id).first()
+    if has_orders:
+        plan.is_active = False
+        db.commit()
+        return {"message": "套餐已下架（存在历史订单）"}
+    db.delete(plan)
+    db.commit()
+    return {"message": "套餐已删除"}
+
+
+# ─────────────────────────────────────────────
+# Admin: Payment orders + manual confirmation
+# ─────────────────────────────────────────────
+
+@app.get("/api/admin/payment/orders", response_model=List[PaymentOrderOut], tags=["admin"])
+def admin_list_orders(
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    q = db.query(PaymentOrder)
+    if status:
+        q = q.filter(PaymentOrder.status == status)
+    return q.order_by(PaymentOrder.created_at.desc()).limit(500).all()
+
+
+@app.post("/api/admin/payment/orders/{order_no}/confirm", response_model=PaymentOrderOut, tags=["admin"])
+def admin_confirm_order(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    from services.payment_service import admin_confirm
+    return admin_confirm(db, order_no, current_user)
+
+
+@app.post("/api/admin/payment/orders/{order_no}/refund", response_model=PaymentOrderOut, tags=["admin"])
+def admin_refund_order(
+    order_no: str,
+    body: PaymentRefundReq,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    from services.payment_service import admin_refund
+    return admin_refund(db, order_no, current_user, notes=body.notes or "")
+
+
+@app.post("/api/admin/payment/orders/{order_no}/cancel", response_model=PaymentOrderOut, tags=["admin"])
+def admin_cancel_order_route(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    from services.payment_service import admin_cancel
+    return admin_cancel(db, order_no, current_user)
+
+
+# ─────────────────────────────────────────────
+# Admin: Payment provider configs
+# ─────────────────────────────────────────────
+
+@app.get("/api/admin/payment/providers", tags=["admin"])
+def admin_get_payment_providers(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    from services.payment_settings import load_payment_config, redact_payment
+    return redact_payment(load_payment_config(db))
+
+
+@app.put("/api/admin/payment/providers", tags=["admin"])
+def admin_update_payment_providers(
+    body: PaymentProvidersPatch,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    from services.payment_settings import save_payment_config, redact_payment, load_payment_config
+    # Merge: don't let masked placeholders overwrite real secrets
+    current = load_payment_config(db)
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    for ch, sub in patch.items():
+        if not isinstance(sub, dict):
+            continue
+        for field in list(sub.keys()):
+            v = sub[field]
+            if isinstance(v, str) and "..." in v and current.get(ch, {}).get(field):
+                sub.pop(field)
+    return redact_payment(save_payment_config(db, patch))
+
+
+# ─────────────────────────────────────────────
+# Admin: Membership config (tier labels, features, support info)
+# ─────────────────────────────────────────────
+
+@app.get("/api/admin/membership/config", tags=["admin"])
+def admin_get_membership_config(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    from services.payment_settings import load_membership_config
+    return load_membership_config(db)
+
+
+@app.put("/api/admin/membership/config", tags=["admin"])
+def admin_update_membership_config(
+    body: MembershipConfigPatch,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    from services.payment_settings import save_membership_config
+    return save_membership_config(db, body.model_dump(exclude_unset=True))
+
+
+# ─────────────────────────────────────────────
+# Admin: Manual tier adjustment
+# ─────────────────────────────────────────────
+
+@app.put("/api/admin/users/{user_id}/tier", response_model=UserOut, tags=["admin"])
+def admin_adjust_user_tier(
+    user_id: int,
+    body: AdminTierAdjustReq,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+):
+    from services.membership_service import admin_set_tier
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "用户不存在")
+    if body.tier not in ("regular", "vip", "vvip", "vvvip"):
+        raise HTTPException(400, "tier 无效")
+
+    expires_at = body.expires_at
+    if body.tier != "regular" and not expires_at and body.days:
+        expires_at = datetime.utcnow() + timedelta(days=body.days)
+
+    try:
+        admin_set_tier(db, user, body.tier, expires_at)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    if body.reason:
+        db.add(CreditTransaction(
+            user_id=user.id,
+            amount=0,
+            reason=f"[管理员 {current_user.username}] 调整等级为 {body.tier}: {body.reason}",
+        ))
+        db.commit()
+    db.refresh(user)
+    return user
 
 
 @app.get("/api/admin/tasks", response_model=List[TaskOut], tags=["admin"])
