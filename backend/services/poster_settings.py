@@ -35,7 +35,9 @@ DEFAULTS: Dict[str, Any] = {
     "flux_api_key":     os.getenv("FLUX_API_KEY", ""),
     "flux_model":       os.getenv("FLUX_MODEL", "black-forest-labs/flux-1.1-pro"),
     "jimeng_api_key":   os.getenv("JIMENG_API_KEY", ""),
-    "jimeng_model":     os.getenv("JIMENG_MODEL", "jimeng-3.0"),
+    "jimeng_model":     os.getenv("JIMENG_MODEL", "doubao-seedream-4-0-250828"),
+    "jimeng_access_key":  os.getenv("JIMENG_ACCESS_KEY", ""),      # for CV API (SigV4)
+    "jimeng_secret_key":  os.getenv("JIMENG_SECRET_KEY", ""),
     "ideogram_api_key": os.getenv("IDEOGRAM_API_KEY", ""),
     "removebg_api_key": os.getenv("REMOVEBG_API_KEY", ""),
     "default_size":     "portrait",

@@ -19,27 +19,42 @@
 
     <!-- Form (when no active generation) -->
     <div v-if="!generationId || generationError" class="form-card">
-      <!-- Brand + event row -->
-      <div class="row-2">
-        <div class="field">
-          <label>品牌名称 <span class="req">*</span></label>
-          <input v-model="form.brandName" class="field-input" placeholder="例：木语" maxlength="40" />
-        </div>
-        <div class="field">
-          <label>节气/节日关键词 <span class="req">*</span></label>
-          <input v-model="form.eventKeyword" class="field-input" placeholder="例：谷雨、中秋" maxlength="20" />
+      <!-- Brand (only required field) -->
+      <div class="field">
+        <label>品牌名称 <span class="req">*</span></label>
+        <input v-model="form.brandName" class="field-input" placeholder="例：木语 / 原木家 / 品质居"
+          maxlength="40" />
+      </div>
+
+      <!-- Event keyword with chip suggestions (optional) -->
+      <div class="field">
+        <label>主题关键词 <span class="opt">（选填，不填则默认「品牌宣传」）</span></label>
+        <input v-model="form.eventKeyword" class="field-input"
+          placeholder="例：谷雨、中秋、新品上市、年终大促..." maxlength="20" />
+        <div class="chip-group-label">快速选择</div>
+        <div class="chip-groups">
+          <div v-for="group in keywordGroups" :key="group.title" class="chip-group">
+            <div class="chip-group-title">{{ group.title }}</div>
+            <div class="chips">
+              <button v-for="kw in group.items" :key="kw"
+                class="chip" :class="{ active: form.eventKeyword === kw }"
+                @click="form.eventKeyword = kw">{{ kw }}</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Headline + subline row (optional) -->
+      <!-- Slogan + subline row (both optional) -->
       <div class="row-2">
         <div class="field">
-          <label>主标题（选填，留空自动用节气名）</label>
-          <input v-model="form.headline" class="field-input" placeholder="例：春雨润万物" maxlength="30" />
+          <label>宣传 Slogan <span class="opt">（选填，作为海报主标题）</span></label>
+          <input v-model="form.headline" class="field-input"
+            placeholder="例：春雨润万物 / 匠心如初 / 质造美好生活" maxlength="30" />
         </div>
         <div class="field">
-          <label>副标题（选填）</label>
-          <input v-model="form.subline" class="field-input" placeholder="例：美好肆意生长" maxlength="60" />
+          <label>副标题 <span class="opt">（选填）</span></label>
+          <input v-model="form.subline" class="field-input"
+            placeholder="例：美好肆意生长 / 限时 8 折" maxlength="60" />
         </div>
       </div>
 
@@ -238,9 +253,44 @@ const styles = [
   { value: 'heritage', icon: '🏮', label: '东方古韵' },
 ]
 
+const keywordGroups = [
+  {
+    title: '🌱 春季节气',
+    items: ['立春', '雨水', '惊蛰', '春分', '清明', '谷雨'],
+  },
+  {
+    title: '☀️ 夏季节气',
+    items: ['立夏', '小满', '芒种', '夏至', '小暑', '大暑'],
+  },
+  {
+    title: '🍂 秋季节气',
+    items: ['立秋', '处暑', '白露', '秋分', '寒露', '霜降'],
+  },
+  {
+    title: '❄️ 冬季节气',
+    items: ['立冬', '小雪', '大雪', '冬至', '小寒', '大寒'],
+  },
+  {
+    title: '🎉 传统节日',
+    items: ['春节', '元宵', '端午', '七夕', '中秋', '重阳', '腊八', '冬至'],
+  },
+  {
+    title: '💝 现代节日',
+    items: ['情人节', '女神节', '母亲节', '父亲节', '儿童节', '国庆', '圣诞'],
+  },
+  {
+    title: '🛍️ 营销节点',
+    items: ['新品上市', '限时特惠', '618 大促', '双 11', '双 12', '周年庆', '年终大促', '开业庆典'],
+  },
+  {
+    title: '🏠 家居场景',
+    items: ['新居入住', '乔迁之喜', '精装美学', '空间改造', '极简生活'],
+  },
+]
+
 const creditCost = computed(() => 5)
 const canGenerate = computed(() =>
-  form.brandName.trim() && form.eventKeyword.trim() && userCredits.value >= creditCost.value
+  form.brandName.trim() && userCredits.value >= creditCost.value
 )
 
 // Generation state
@@ -488,6 +538,61 @@ onUnmounted(closeEventSource)
   margin-bottom: 6px;
 }
 .req { color: var(--ybc-danger); }
+.opt { color: var(--ybc-text-faint); font-weight: 400; font-size: 11px; margin-left: 4px; }
+
+/* Keyword chip suggestions */
+.chip-group-label {
+  font-size: 11px;
+  color: var(--ybc-text-muted);
+  margin: 14px 0 8px;
+  letter-spacing: 0.5px;
+}
+.chip-groups {
+  display: flex; flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--ybc-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.chip-group {
+  display: flex; align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.chip-group-title {
+  font-size: 11px;
+  color: var(--ybc-text-muted);
+  flex-shrink: 0;
+  width: 84px;
+  padding-top: 5px;
+}
+.chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  flex: 1;
+}
+.chip {
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ybc-border);
+  border-radius: 100px;
+  color: var(--ybc-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+.chip:hover {
+  background: rgba(236, 72, 153, 0.1);
+  color: #f9a8d4;
+  border-color: rgba(236, 72, 153, 0.35);
+}
+.chip.active {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.25), rgba(168, 85, 247, 0.25));
+  color: #fff;
+  border-color: rgba(236, 72, 153, 0.5);
+  box-shadow: 0 0 0 1px rgba(236, 72, 153, 0.15);
+}
 
 .field-input {
   width: 100%;
@@ -823,5 +928,7 @@ select.field-input option { background: #12121a; color: var(--ybc-text); }
   .style-grid { grid-template-columns: repeat(3, 1fr); }
   .form-card, .progress-card, .result-card, .history-card { padding: 20px; }
   .page-hero h1 { font-size: 22px; }
+  .chip-group { flex-direction: column; gap: 6px; }
+  .chip-group-title { width: auto; padding-top: 0; }
 }
 </style>

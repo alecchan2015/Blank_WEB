@@ -2944,11 +2944,10 @@ async def generate_poster(
 
     brand_name = (body.get("brand_name") or "").strip()
     if not brand_name:
-        raise HTTPException(400, "brand_name is required")
+        raise HTTPException(400, "品牌名称不能为空")
 
-    event_keyword = (body.get("event_keyword") or "").strip()
-    if not event_keyword:
-        raise HTTPException(400, "event_keyword is required (节气/节日关键词)")
+    # event_keyword is OPTIONAL — defaults to 新品 / 品牌宣传 if user skips.
+    event_keyword = (body.get("event_keyword") or "").strip() or "品牌宣传"
 
     # Credit cost — admin configurable
     cc = load_credits_config(db).get("poster_generation", {}).get("per_generation", 5)

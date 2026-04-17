@@ -142,12 +142,32 @@
           <div class="hint">中文场景理解强，适合节气/古风海报</div>
         </el-form-item>
         <el-form-item label="即梦模型">
-          <el-input
+          <el-select
             v-model="form.jimeng_model"
-            placeholder="jimeng-3.0"
+            filterable allow-create
+            placeholder="选择或输入模型 ID"
             style="width:420px"
-          />
-          <div class="hint">例如 jimeng-3.0 等</div>
+          >
+            <el-option-group label="即梦 4.0（最新）">
+              <el-option label="doubao-seedream-4-0-250828（4.0 文生图）" value="doubao-seedream-4-0-250828" />
+              <el-option label="doubao-seedream-4-0（官方别名）" value="doubao-seedream-4-0" />
+              <el-option label="high_aes_general_v40（CV API req_key）" value="high_aes_general_v40" />
+            </el-option-group>
+            <el-option-group label="即梦 3.0">
+              <el-option label="doubao-seedream-3-0-t2i-250415（3.0 文生图）" value="doubao-seedream-3-0-t2i-250415" />
+              <el-option label="doubao-seedream-3-0-t2i" value="doubao-seedream-3-0-t2i" />
+              <el-option label="jimeng-3.0（ARK 别名）" value="jimeng-3.0" />
+            </el-option-group>
+            <el-option-group label="即梦 2.x / CV req_key">
+              <el-option label="jimeng-2.1" value="jimeng-2.1" />
+              <el-option label="high_aes_general_v30（CV API）" value="high_aes_general_v30" />
+              <el-option label="high_aes_general_v20（CV API）" value="high_aes_general_v20" />
+            </el-option-group>
+          </el-select>
+          <div class="hint">
+            推荐 <code>doubao-seedream-4-0-250828</code>（最新 4.0）— 中文场景理解最强，支持 3K 高清输出。<br/>
+            若使用官方 CV API（<code>visual.volcengineapi.com</code>）请填 <code>high_aes_general_v40</code> 作为 req_key。
+          </div>
         </el-form-item>
 
         <el-divider content-position="left">通用设置</el-divider>
@@ -206,7 +226,7 @@ const form = ref({
   flux_model: 'black-forest-labs/flux-1.1-pro',
   jimeng_api_key: '',
   jimeng_api_key_set: false,
-  jimeng_model: 'jimeng-3.0',
+  jimeng_model: 'doubao-seedream-4-0-250828',
   default_size: 'portrait',
   default_style: 'natural',
   add_footer: true,

@@ -205,36 +205,52 @@ class FluxPosterProvider(BasePosterProvider):
                 return PosterResult(success=False, provider=self.name, error=str(e))
 
 
-# ── 即梦 (ByteDance Jimeng) — OpenAI-compat endpoint ──────────────────────
+# ── 即梦 (ByteDance Jimeng) ────────────────────────────────────────────────
 class JimengPosterProvider(BasePosterProvider):
-    """Wraps 即梦's OpenAI-compat image endpoint. Same protocol as OpenAI but
-    with a different base_url; ideal for Chinese scene understanding."""
+    """Dual-mode adapter for 即梦 (Volcengine 火山引擎):
+
+    - If model starts with `doubao-seedream-*` or `jimeng-*` → OpenAI-compat
+      ARK endpoint at `ark.cn-beijing.volces.com/api/v3` with Bearer token.
+      This is the preferred path and supports 即梦 3.0 & 4.0.
+
+    - If model starts with `high_aes_general_v*` → Volcengine CV API at
+      `visual.volcengineapi.com` with SigV4-style HMAC-SHA256 signing
+      (Action=CVProcess, Version=2022-08-31). Needs access_key + secret_key.
+    """
     name = "jimeng"
 
     async def generate(self, *, prompt, size, variant_count, api_key, cfg):
+        model = cfg.get("jimeng_model") or "doubao-seedream-4-0-250828"
+
+        # Route: CV API vs ARK OpenAI-compat
+        if model.startswith("high_aes_general_") or model.startswith("jimeng_high_aes_"):
+            return await self._generate_cv_api(prompt, size, variant_count, model, cfg)
+        return await self._generate_ark(prompt, size, variant_count, model, api_key)
+
+    async def _generate_ark(self, prompt, size, variant_count, model, api_key):
         if not api_key:
             return PosterResult(success=False, provider=self.name, error="即梦 API key not configured")
 
-        # Jimeng supports 9:16 directly
         w, h = size
+        # Seedream 4.0 supports native portrait 9:16 (1152x2048, 1536x2560, 2304x4096)
+        # We request the closest preset, then upscale in compositor.
         if w == h:
-            js_size = "1024x1024"
+            ark_size = "2048x2048"
         elif w > h:
-            js_size = "1792x1024"
+            ark_size = "2048x1152"  # 16:9 approx
         else:
-            js_size = "1024x1792"
+            ark_size = "1536x2560"  # 9:16 high-quality
 
         base_url = "https://ark.cn-beijing.volces.com/api/v3"
-        model = cfg.get("jimeng_model") or "jimeng-3.0"
 
         variants = []
-        async with httpx.AsyncClient(timeout=180, proxy=_get_proxy()) as client:
+        async with httpx.AsyncClient(timeout=240, proxy=_get_proxy()) as client:
             for i in range(max(1, variant_count)):
                 try:
                     r = await client.post(
                         f"{base_url}/images/generations",
                         headers={"Authorization": f"Bearer {api_key}"},
-                        json={"model": model, "prompt": prompt, "size": js_size, "n": 1},
+                        json={"model": model, "prompt": prompt, "size": ark_size, "n": 1},
                     )
                     if r.status_code >= 400:
                         return PosterResult(success=False, provider=self.name,
@@ -243,11 +259,122 @@ class JimengPosterProvider(BasePosterProvider):
                     items = data.get("data") or []
                     if items and items[0].get("url"):
                         variants.append({"index": i, "png_url": items[0]["url"]})
+                    elif items and items[0].get("b64_json"):
+                        variants.append({"index": i, "png_b64": items[0]["b64_json"]})
                 except Exception as e:                                # noqa: BLE001
                     return PosterResult(success=False, provider=self.name, error=str(e))
         if not variants:
             return PosterResult(success=False, provider=self.name, error="No image returned")
         return PosterResult(success=True, provider=self.name, variants=variants, prompt=prompt)
+
+    async def _generate_cv_api(self, prompt, size, variant_count, req_key, cfg):
+        """Official Volcengine CV API path (visual.volcengineapi.com).
+
+        Uses Volc SigV4 HMAC-SHA256. Requires access_key + secret_key in cfg
+        (not the ARK api_key / Bearer token).
+        """
+        ak = cfg.get("jimeng_access_key", "") or cfg.get("jimeng_api_key", "")
+        sk = cfg.get("jimeng_secret_key", "")
+        if not ak or not sk:
+            return PosterResult(success=False, provider=self.name,
+                                 error=f"CV API {req_key} 需要配置 jimeng_access_key + jimeng_secret_key")
+
+        import hashlib, hmac, json as _json
+        from datetime import datetime as _dt
+
+        w, h = size
+        # Clamp to CV API supported range (max 2048 per side)
+        tw = min(w, 2048)
+        th = min(h, 2048)
+        payload = {
+            "req_key":  req_key,
+            "prompt":   prompt,
+            "width":    tw,
+            "height":   th,
+            "seed":     -1,
+            "scale":    3.5,
+            "use_sr":   True,
+            "return_url": True,
+            "logo_info": {"add_logo": False},
+        }
+        body = _json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        host = "visual.volcengineapi.com"
+        service = "cv"
+        region = "cn-north-1"
+        algorithm = "HMAC-SHA256"
+        now = _dt.utcnow()
+        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+        date_stamp = now.strftime("%Y%m%d")
+
+        canonical_uri = "/"
+        canonical_querystring = f"Action=CVProcess&Version=2022-08-31"
+        payload_hash = hashlib.sha256(body).hexdigest()
+        canonical_headers = (
+            f"content-type:application/json\n"
+            f"host:{host}\n"
+            f"x-content-sha256:{payload_hash}\n"
+            f"x-date:{amz_date}\n"
+        )
+        signed_headers = "content-type;host;x-content-sha256;x-date"
+        canonical_request = (
+            f"POST\n{canonical_uri}\n{canonical_querystring}\n"
+            f"{canonical_headers}\n{signed_headers}\n{payload_hash}"
+        )
+        credential_scope = f"{date_stamp}/{region}/{service}/request"
+        string_to_sign = (
+            f"{algorithm}\n{amz_date}\n{credential_scope}\n"
+            f"{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+        )
+
+        def _sign(key, msg):
+            return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+        k_date = _sign(sk.encode("utf-8"), date_stamp)
+        k_region = _sign(k_date, region)
+        k_service = _sign(k_region, service)
+        k_signing = _sign(k_service, "request")
+        signature = hmac.new(k_signing, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+
+        authorization = (
+            f"{algorithm} Credential={ak}/{credential_scope}, "
+            f"SignedHeaders={signed_headers}, Signature={signature}"
+        )
+        headers = {
+            "Content-Type":      "application/json",
+            "Host":               host,
+            "X-Date":             amz_date,
+            "X-Content-Sha256":   payload_hash,
+            "Authorization":      authorization,
+        }
+
+        url = f"https://{host}/?{canonical_querystring}"
+        try:
+            async with httpx.AsyncClient(timeout=180, proxy=_get_proxy()) as client:
+                r = await client.post(url, headers=headers, content=body)
+                if r.status_code >= 400:
+                    return PosterResult(success=False, provider=self.name,
+                                         error=f"CV API [{r.status_code}] {r.text[:400]}")
+                data = r.json()
+                # Response: {"code":10000, "data":{"image_urls":["https://..."]}}
+                code = data.get("code") or (data.get("ResponseMetadata") or {}).get("Error")
+                if code and code != 10000:
+                    return PosterResult(success=False, provider=self.name,
+                                         error=f"CV API code={code}: {data.get('message', '')[:300]}")
+                d = data.get("data") or {}
+                urls = d.get("image_urls") or d.get("binary_data_base64") or []
+                variants = []
+                for i, item in enumerate(urls[:variant_count]):
+                    if isinstance(item, str) and item.startswith("http"):
+                        variants.append({"index": i, "png_url": item})
+                    elif isinstance(item, str):
+                        variants.append({"index": i, "png_b64": item})
+                if not variants:
+                    return PosterResult(success=False, provider=self.name,
+                                         error=f"CV API no image returned: {str(data)[:200]}")
+                return PosterResult(success=True, provider=self.name,
+                                     variants=variants, prompt=prompt)
+        except Exception as e:                                        # noqa: BLE001
+            return PosterResult(success=False, provider=self.name, error=str(e))
 
 
 # ── Factory + chain ────────────────────────────────────────────────────────
