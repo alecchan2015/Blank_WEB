@@ -1,31 +1,51 @@
 <template>
   <div class="new-task-page">
-    <div class="page-header">
-      <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon> 返回</el-button>
-      <h2>新建品牌策划任务</h2>
+    <button class="back-btn" @click="$router.back()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M10 4L6 8l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>返回</span>
+    </button>
+
+    <div class="page-hero">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        <span>AI-Powered Task</span>
+      </div>
+      <h1>新建品牌策划任务</h1>
+      <p>描述您的需求，选择 AI 专家，全流程自动化生成</p>
     </div>
 
     <div class="form-card">
       <!-- Brand Name -->
       <div class="form-section">
-        <label class="section-label">品牌名称 <span class="optional">（选填）</span></label>
-        <el-input v-model="form.brand_name" placeholder="例如：木语、原木家、品质居等" size="large" maxlength="50" show-word-limit />
+        <label class="section-label">
+          <span>品牌名称</span>
+          <span class="opt">· 选填</span>
+        </label>
+        <input v-model="form.brand_name" class="field-input"
+          placeholder="例如：木语、原木家、品质居" maxlength="50" />
       </div>
 
       <!-- Query -->
       <div class="form-section">
-        <label class="section-label">您的需求 <span class="required">*</span></label>
-        <el-input
-          v-model="form.query" type="textarea" :rows="4" size="large"
-          placeholder="例如：我想创建一个定位中高端消费者的北欧简约风格家具品牌，目标市场是25-40岁的城市精英群体，请帮我制定全套品牌战略方案。"
-          maxlength="1000" show-word-limit
-        />
+        <label class="section-label">
+          <span>您的需求</span>
+          <span class="required">*</span>
+        </label>
+        <textarea v-model="form.query" class="field-input field-textarea"
+          :rows="4" maxlength="1000"
+          placeholder="例如：我想创建一个定位中高端消费者的北欧简约风格家具品牌，目标市场是25-40岁的城市精英群体..."></textarea>
+        <div class="counter">{{ form.query.length }} / 1000</div>
       </div>
 
       <!-- Agent Selection -->
       <div class="form-section">
-        <label class="section-label">选择 AI 专家 <span class="required">*</span></label>
-        <p class="section-desc">可选单个或多个专家协作，多专家将按顺序分工合作</p>
+        <label class="section-label">
+          <span>选择 AI 专家</span>
+          <span class="required">*</span>
+        </label>
+        <p class="section-hint">可选单个或多个专家协作，多专家将按顺序分工合作</p>
         <div class="agent-grid">
           <div
             v-for="agent in agents" :key="agent.type"
@@ -34,36 +54,47 @@
             @click="toggleAgent(agent.type)"
           >
             <div class="agent-icon">{{ agent.icon }}</div>
-            <div class="agent-info">
+            <div class="agent-body">
               <div class="agent-name">{{ agent.name }}</div>
-              <div class="agent-desc">{{ agentDesc[agent.type] }}</div>
+              <div class="agent-desc">{{ agent.desc }}</div>
             </div>
-            <el-icon v-if="form.agents_selected.includes(agent.type)" class="check-icon"><Select /></el-icon>
+            <div class="check-box">
+              <svg v-if="form.agents_selected.includes(agent.type)" width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M13 4.5L6 11.5L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
           </div>
         </div>
 
-        <!-- Quick Select -->
-        <div class="quick-select">
-          <el-button size="small" @click="selectAll">全选（四专家协作）</el-button>
-          <el-button size="small" @click="form.agents_selected = []">清空</el-button>
+        <div class="quick-row">
+          <button class="quick-btn" @click="selectAll">全选（四专家协作）</button>
+          <button class="quick-btn" @click="form.agents_selected = []">清空</button>
         </div>
       </div>
 
-      <!-- Collaboration Note -->
-      <el-alert
-        v-if="form.agents_selected.length > 1"
-        title="多专家协作模式"
-        :description="`将按顺序启动：${selectedAgentNames.join(' → ')}，后续专家会参考前序专家的输出`"
-        type="info" show-icon :closable="false" style="margin-bottom:20px"
-      />
+      <!-- Pipeline hint -->
+      <transition name="fade">
+        <div v-if="form.agents_selected.length > 1" class="pipeline-hint">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 5v4l2 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>多专家协作：{{ selectedAgentNames.join(' → ') }}</span>
+        </div>
+      </transition>
 
-      <el-button
-        type="primary" size="large" :loading="submitting"
-        :disabled="!form.query || !form.agents_selected.length"
-        @click="submitTask" style="width:100%"
+      <button
+        class="submit-btn"
+        :disabled="!form.query || !form.agents_selected.length || submitting"
+        @click="submitTask"
       >
-        🚀 开始 AI 分析
-      </el-button>
+        <span v-if="submitting" class="spinner"></span>
+        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>{{ submitting ? '启动中…' : '启动 AI 分析' }}</span>
+      </button>
     </div>
   </div>
 </template>
@@ -71,35 +102,34 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, Select } from '@element-plus/icons-vue'
 import { tasksAPI, agentsAPI } from '../api'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const submitting = ref(false)
-const agents = ref([])
 
-const form = ref({ query: '', brand_name: '', agents_selected: [] })
+const form = ref({ query: '', brand_name: '', agents_selected: ['strategy', 'brand', 'operations'] })
 
-const agentDesc = {
-  strategy: '市场分析、竞争定位、品牌战略规划',
-  brand: 'Logo概念、色彩体系、视觉物料规范',
-  logo_design: 'AI智能生成Logo，输出PNG/PSD/SVG多格式',
-  operations: '渠道策略、营销计划、执行路径',
-}
+const agents = ref([
+  { type: 'strategy',    name: '战略规划专家', icon: '🎯', desc: '市场分析·竞争定位·品牌战略规划' },
+  { type: 'brand',       name: '品牌设计专家', icon: '🎨', desc: 'Logo概念·色彩体系·视觉物料规范' },
+  { type: 'logo_design', name: 'Logo 设计专家', icon: '✨', desc: 'AI智能生成Logo，输出 PNG/PSD/SVG' },
+  { type: 'operations',  name: '运营实施专家', icon: '🚀', desc: '渠道策略·营销计划·执行路径' },
+])
 
 const agentNames = { strategy: '战略规划', brand: '品牌设计', logo_design: 'Logo设计', operations: '运营实施' }
 
 const selectedAgentNames = computed(() =>
-  ['strategy', 'brand', 'logo_design', 'operations'].filter(a => form.value.agents_selected.includes(a)).map(a => agentNames[a])
+  ['strategy', 'brand', 'logo_design', 'operations']
+    .filter(a => form.value.agents_selected.includes(a))
+    .map(a => agentNames[a])
 )
 
 function toggleAgent(type) {
-  const idx = form.value.agents_selected.indexOf(type)
-  if (idx > -1) form.value.agents_selected.splice(idx, 1)
+  const i = form.value.agents_selected.indexOf(type)
+  if (i > -1) form.value.agents_selected.splice(i, 1)
   else form.value.agents_selected.push(type)
 }
-
 function selectAll() {
   form.value.agents_selected = agents.value.map(a => a.type)
 }
@@ -123,37 +153,253 @@ async function submitTask() {
 }
 
 onMounted(async () => {
-  try { agents.value = await agentsAPI.list() }
-  catch { agents.value = [
-    { type: 'strategy', name: '战略规划专家', icon: '🎯' },
-    { type: 'brand', name: '品牌设计专家', icon: '🎨' },
-    { type: 'operations', name: '运营实施专家', icon: '🚀' },
-  ]}
+  try {
+    const list = await agentsAPI.list()
+    if (list?.length) {
+      const descMap = {
+        strategy: '市场分析·竞争定位·品牌战略规划',
+        brand: 'Logo概念·色彩体系·视觉物料规范',
+        logo_design: 'AI智能生成Logo，输出 PNG/PSD/SVG',
+        operations: '渠道策略·营销计划·执行路径',
+      }
+      agents.value = list.map(a => ({ ...a, desc: descMap[a.type] || '' }))
+    }
+  } catch {}
 })
 </script>
 
 <style scoped>
-.new-task-page { max-width: 720px; margin: 0 auto; }
-.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
-.page-header h2 { font-size: 20px; color: #1a1a2e; }
-.form-card { background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
-.form-section { margin-bottom: 28px; }
-.section-label { display: block; font-size: 15px; font-weight: 600; color: #222; margin-bottom: 10px; }
-.section-desc { font-size: 13px; color: #888; margin-bottom: 12px; }
-.required { color: #f56c6c; }
-.optional { color: #aaa; font-weight: normal; font-size: 13px; }
-.agent-grid { display: flex; flex-direction: column; gap: 12px; }
-.agent-card {
-  display: flex; align-items: center; gap: 16px;
-  border: 2px solid #e4e7ed; border-radius: 10px; padding: 16px;
-  cursor: pointer; transition: all 0.2s; position: relative;
-  background: #fafafa;
+.new-task-page {
+  max-width: 760px;
+  margin: 0 auto;
 }
-.agent-card:hover { border-color: #409eff; background: #f0f7ff; }
-.agent-card.selected { border-color: #409eff; background: #ecf5ff; }
-.agent-icon { font-size: 32px; flex-shrink: 0; }
-.agent-name { font-size: 15px; font-weight: 600; color: #222; margin-bottom: 4px; }
-.agent-desc { font-size: 12px; color: #888; }
-.check-icon { position: absolute; right: 16px; color: #409eff; font-size: 20px; }
-.quick-select { margin-top: 12px; display: flex; gap: 8px; }
+
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--ybc-border);
+  border-radius: 8px;
+  color: var(--ybc-text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+  margin-bottom: 20px;
+}
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ybc-text);
+}
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.page-hero {
+  text-align: center;
+  margin-bottom: 28px;
+  padding: 20px 0;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  border-radius: 100px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--ybc-accent-light);
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.hero-badge .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: ybc-pulse-dot 2s infinite;
+}
+.page-hero h1 {
+  font-size: 28px; font-weight: 800;
+  color: var(--ybc-text-strong);
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+.page-hero p {
+  font-size: 14px;
+  color: var(--ybc-text-dim);
+}
+
+/* ── Form card ────────────────────────────────────────────── */
+.form-card {
+  background: var(--ybc-surface-1);
+  border: 1px solid var(--ybc-border);
+  border-radius: 20px;
+  padding: 28px 32px;
+  box-shadow: var(--ybc-shadow-md);
+}
+
+.form-section { margin-bottom: 24px; }
+
+.section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600;
+  color: var(--ybc-text);
+  margin-bottom: 10px;
+}
+.section-label .opt { color: var(--ybc-text-faint); font-weight: 400; font-size: 11px; }
+.section-label .required { color: var(--ybc-danger); }
+
+.section-hint {
+  font-size: 12px;
+  color: var(--ybc-text-muted);
+  margin: -6px 0 12px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ybc-border);
+  border-radius: 10px;
+  color: var(--ybc-text-strong);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+.field-input:focus {
+  border-color: var(--ybc-accent);
+  background: rgba(99, 102, 241, 0.04);
+}
+.field-input::placeholder { color: var(--ybc-text-faint); }
+.field-textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.6;
+}
+.counter {
+  text-align: right;
+  font-size: 11px;
+  color: var(--ybc-text-faint);
+  margin-top: 6px;
+}
+
+/* ── Agent cards ──────────────────────────────────────────── */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.agent-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--ybc-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.15s;
+  user-select: none;
+}
+.agent-card:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.04);
+}
+.agent-card.selected {
+  border-color: var(--ybc-accent);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+}
+.agent-icon { font-size: 24px; flex-shrink: 0; }
+.agent-body { flex: 1; min-width: 0; }
+.agent-name {
+  font-size: 13px; font-weight: 600;
+  color: var(--ybc-text-strong);
+  margin-bottom: 2px;
+}
+.agent-desc {
+  font-size: 11px;
+  color: var(--ybc-text-muted);
+}
+.check-box {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--ybc-border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  transition: 0.15s;
+}
+.agent-card.selected .check-box {
+  background: var(--ybc-accent);
+  border-color: var(--ybc-accent);
+}
+
+.quick-row {
+  display: flex; gap: 8px;
+  margin-top: 12px;
+}
+.quick-btn {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ybc-border);
+  border-radius: 8px;
+  color: var(--ybc-text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+.quick-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--ybc-text);
+  border-color: var(--ybc-accent-light);
+}
+
+.pipeline-hint {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 10px;
+  color: var(--ybc-accent-light);
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+
+/* ── Submit ─────────────────────────────────────────────── */
+.submit-btn {
+  width: 100%;
+  padding: 14px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--ybc-gradient-primary);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px; font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  font-family: inherit;
+}
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 32px rgba(99, 102, 241, 0.4);
+}
+.submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+@media (max-width: 640px) {
+  .form-card { padding: 20px; }
+  .agent-grid { grid-template-columns: 1fr; }
+  .page-hero h1 { font-size: 22px; }
+}
 </style>

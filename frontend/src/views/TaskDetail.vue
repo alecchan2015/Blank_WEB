@@ -1,82 +1,114 @@
 <template>
   <div class="task-detail">
-    <div class="page-header">
-      <el-button text @click="$router.push('/dashboard')">
-        <el-icon><ArrowLeft /></el-icon> 返回
-      </el-button>
-      <div class="header-info">
-        <h2>{{ task?.brand_name || '品牌策划' }}</h2>
-        <el-tag :type="statusType[task?.status]" v-if="task">{{ statusLabel[task.status] }}</el-tag>
+    <!-- Top bar -->
+    <div class="top-bar">
+      <button class="back-btn" @click="$router.push('/dashboard')">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M10 4L6 8l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>工作台</span>
+      </button>
+      <div class="title-row">
+        <h1>{{ task?.brand_name || '品牌策划' }}</h1>
+        <span v-if="task" class="status-pill" :class="`status-${task.status}`">
+          <span class="dot"></span>{{ statusLabel[task.status] }}
+        </span>
       </div>
-      <div class="header-actions">
-        <!-- Refresh button: only when completed or failed -->
-        <el-button
-          v-if="task?.status === 'completed' || task?.status === 'failed'"
-          :icon="Refresh"
-          :loading="regenerating"
-          @click="handleRegenerate"
-          round
-        >重新生成</el-button>
+      <div class="action-row">
+        <button v-if="task?.status === 'completed' || task?.status === 'failed'"
+          class="btn-ghost" :disabled="regenerating" @click="handleRegenerate">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" :style="{ animation: regenerating ? 'spin 1s linear infinite' : '' }">
+            <path d="M13 3v4h-4M3 13v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4.2 6a5 5 0 018-1.5L13 7M11.8 10a5 5 0 01-8 1.5L3 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ regenerating ? '重新生成中…' : '重新生成' }}</span>
+        </button>
       </div>
     </div>
 
-    <el-card class="query-card" shadow="never">
-      <div class="query-label">需求描述</div>
+    <!-- Query card -->
+    <div class="query-card">
+      <div class="query-head">
+        <span class="query-label">需求描述</span>
+        <span v-if="task?.created_at" class="query-time">
+          {{ new Date(task.created_at).toLocaleString('zh-CN') }}
+        </span>
+      </div>
       <div class="query-text">{{ task?.query }}</div>
       <div class="query-meta">
-        <el-tag v-for="a in task?.agents_selected" :key="a" :type="agentTagType[a]" size="small" effect="light">
-          {{ agentNames[a] }}
-        </el-tag>
-        <span class="query-time">{{ task?.created_at ? new Date(task.created_at).toLocaleString('zh-CN') : '' }}</span>
+        <span v-for="a in task?.agents_selected" :key="a"
+          class="agent-chip" :class="`a-${a}`">
+          <span>{{ agentIcon[a] }}</span>
+          <span>{{ agentNames[a] }}</span>
+        </span>
       </div>
-    </el-card>
+    </div>
 
-    <!-- Agent Results -->
-    <div class="results-section">
-      <div v-for="agentType in orderedAgents" :key="agentType" class="agent-result-block">
-        <div class="agent-result-header">
-          <span class="agent-result-icon">{{ agentIcon[agentType] }}</span>
-          <span class="agent-result-name">{{ agentNames[agentType] }}</span>
-          <el-tag v-if="agentStatus[agentType] === 'streaming'" type="warning" effect="dark" size="small">
-            <el-icon class="spin"><Loading /></el-icon> 生成中...
-          </el-tag>
-          <el-tag v-else-if="agentStatus[agentType] === 'done'" type="success" size="small">完成</el-tag>
-          <el-tag v-else-if="agentStatus[agentType] === 'waiting'" type="info" size="small">等待中</el-tag>
+    <!-- Results -->
+    <div class="results">
+      <div v-for="agentType in orderedAgents" :key="agentType" class="result-block">
+        <div class="result-head">
+          <span class="result-icon">{{ agentIcon[agentType] }}</span>
+          <span class="result-name">{{ agentNames[agentType] }}</span>
+
+          <span v-if="agentStatus[agentType] === 'streaming'" class="stage-badge streaming">
+            <span class="live-dot"></span>生成中
+          </span>
+          <span v-else-if="agentStatus[agentType] === 'done'" class="stage-badge done">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 5l2 2 4-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            完成
+          </span>
+          <span v-else class="stage-badge waiting">等待中</span>
         </div>
 
-        <!-- Streaming or done content -->
+        <!-- Content -->
         <div v-if="agentContents[agentType]" class="md-output" v-html="renderMd(agentContents[agentType])"></div>
-        <div v-else-if="agentStatus[agentType] === 'waiting'" class="waiting-placeholder">
-          等待前序专家完成分析...
+        <div v-else-if="agentStatus[agentType] === 'waiting'" class="placeholder">
+          <div class="placeholder-icon">⏳</div>
+          <div>等待前序专家完成分析…</div>
         </div>
 
-        <!-- Download Files -->
+        <!-- Files -->
         <div v-if="agentFiles[agentType]?.length" class="file-section">
-          <div class="file-section-title">📎 可下载文件</div>
+          <div class="file-head">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M4 2h6l4 4v8H4V2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <path d="M10 2v4h4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+            </svg>
+            <span>可下载文件</span>
+          </div>
           <div class="file-list">
-            <div v-for="file in agentFiles[agentType]" :key="file.id" class="file-item">
+            <div v-for="file in agentFiles[agentType]" :key="file.id" class="file-row">
               <span class="file-icon">{{ fileIcon[file.type] || '📁' }}</span>
               <span class="file-name">{{ file.name }}</span>
-              <el-tag v-if="file.credits === 0" type="success" size="small" effect="light">免费</el-tag>
-              <span v-else class="file-credits">{{ file.credits }} 积分</span>
-              <el-button size="small" type="primary" plain @click="downloadFile(file)" :loading="file.downloading">
+              <span v-if="file.credits === 0" class="cost-pill cost-free">免费</span>
+              <span v-else class="cost-pill cost-paid">{{ file.credits }} 积分</span>
+              <button class="download-btn" @click="downloadFile(file)">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M3 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
                 下载
-              </el-button>
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Error state -->
-    <el-alert v-if="error" :title="error" type="error" show-icon style="margin-top:16px" />
+    <!-- Error -->
+    <div v-if="error" class="error-banner">
+      <span>⚠️</span>
+      <span>{{ error }}</span>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Loading, Refresh } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { tasksAPI, filesAPI } from '../api'
 import { useUserStore } from '../store'
@@ -89,56 +121,43 @@ const store = useUserStore()
 const task = ref(null)
 const error = ref('')
 const agentContents = ref({})
-const agentStatus = ref({})   // waiting | streaming | done
+const agentStatus = ref({})
 const agentFiles = ref({})
 const regenerating = ref(false)
 let es = null
 
-const agentNames = { strategy: '战略规划专家', brand: '品牌设计专家', logo_design: 'Logo设计专家', operations: '运营实施专家' }
+const agentNames = { strategy: '战略规划专家', brand: '品牌设计专家', logo_design: 'Logo 设计专家', operations: '运营实施专家' }
 const agentIcon  = { strategy: '🎯', brand: '🎨', logo_design: '✨', operations: '🚀' }
-const agentTagType = { strategy: 'primary', brand: 'success', logo_design: 'danger', operations: 'warning' }
-const statusType   = { pending: 'info', processing: 'warning', completed: 'success', failed: 'danger' }
-const statusLabel  = { pending: '待处理', processing: '进行中', completed: '已完成', failed: '失败' }
-const fileIcon     = { md: '📄', pdf: '📕', png: '🖼️', pptx: '📊', psd: '🎨' }
+const statusLabel = { pending: '待处理', processing: '进行中', completed: '已完成', failed: '失败' }
+const fileIcon = { md: '📄', pdf: '📕', png: '🖼️', pptx: '📊', psd: '🎨' }
 
 const orderedAgents = computed(() => {
   if (!task.value) return []
   return ['strategy', 'brand', 'logo_design', 'operations'].filter(a => task.value.agents_selected.includes(a))
 })
 
-function renderMd(text) {
-  return marked.parse(text || '', { breaks: true })
-}
+function renderMd(text) { return marked.parse(text || '', { breaks: true }) }
 
 function initAgentStatuses() {
   orderedAgents.value.forEach(a => {
-    agentStatus.value[a]   = 'waiting'
+    agentStatus.value[a] = 'waiting'
     agentContents.value[a] = ''
-    agentFiles.value[a]    = []
+    agentFiles.value[a] = []
   })
 }
 
 function loadExistingResults() {
   if (!task.value?.results?.length) return
-  // Note: the backend DTO does NOT expose `file_path` (absolute server path,
-  // withheld for security). A row is a FILE iff it has a `file_type`; otherwise
-  // it's a content row whose `content` carries the markdown output.
   task.value.results.forEach(r => {
     if (r.file_type) {
       const files = agentFiles.value[r.agent_type] || []
-      // Guard against duplicate pushes if loadExistingResults is called twice
       if (!files.some(f => f.id === r.id)) {
-        files.push({
-          id:       r.id,
-          type:     r.file_type,
-          name:     r.file_name,
-          credits:  r.download_credits,
-        })
+        files.push({ id: r.id, type: r.file_type, name: r.file_name, credits: r.download_credits })
       }
       agentFiles.value[r.agent_type] = files
     } else if (r.content) {
       agentContents.value[r.agent_type] = r.content
-      agentStatus.value[r.agent_type]   = 'done'
+      agentStatus.value[r.agent_type] = 'done'
     }
   })
 }
@@ -147,16 +166,12 @@ function startStream() {
   if (es) { es.close(); es = null }
   const token = localStorage.getItem('token')
   es = new EventSource(`/api/tasks/${route.params.id}/stream?token=${token}`)
-
   es.onmessage = (e) => {
     const data = JSON.parse(e.data)
-
     if (data.type === 'agent_start') {
       agentStatus.value[data.agent] = 'streaming'
-
     } else if (data.type === 'chunk') {
       agentContents.value[data.agent] = (agentContents.value[data.agent] || '') + data.content
-
     } else if (data.type === 'agent_done') {
       agentStatus.value[data.agent] = 'done'
       if (data.files?.length) {
@@ -164,24 +179,19 @@ function startStream() {
           id: f.id, type: f.type, name: f.name, credits: 0,
         }))
       }
-
     } else if (data.type === 'all_done') {
       task.value.status = 'completed'
       es.close()
       ElMessage.success('内容已生成并保存')
-
     } else if (data.type === 'error') {
       error.value = data.message
       task.value.status = 'failed'
       es.close()
-
     } else if (data.type === 'already_done') {
-      // Task already completed on server but we called stream — reload results
       es.close()
       reloadResults()
     }
   }
-
   es.onerror = () => { es.close() }
 }
 
@@ -190,45 +200,27 @@ async function reloadResults() {
     task.value = await tasksAPI.get(route.params.id)
     initAgentStatuses()
     loadExistingResults()
-  } catch (e) {
-    ElMessage.error(e.message)
-  }
+  } catch (e) { ElMessage.error(e.message) }
 }
 
 async function handleRegenerate() {
   try {
-    await ElMessageBox.confirm(
-      '将清除当前所有生成内容并重新生成，确认继续？',
-      '重新生成',
-      { confirmButtonText: '确认重新生成', cancelButtonText: '取消', type: 'warning' }
-    )
-  } catch {
-    return  // user cancelled
-  }
-
+    await ElMessageBox.confirm('将清除当前所有生成内容并重新生成，确认继续？', '重新生成',
+      { confirmButtonText: '确认重新生成', cancelButtonText: '取消', type: 'warning' })
+  } catch { return }
   regenerating.value = true
   error.value = ''
-
   try {
     await tasksAPI.regenerate(route.params.id)
     task.value.status = 'pending'
-
-    // Clear local state
     initAgentStatuses()
-
-    // Start new stream
     startStream()
-    ElMessage.info('开始重新生成...')
-  } catch (e) {
-    ElMessage.error(e.message)
-  } finally {
-    regenerating.value = false
-  }
+    ElMessage.info('开始重新生成…')
+  } catch (e) { ElMessage.error(e.message) }
+  finally { regenerating.value = false }
 }
 
 function downloadFile(file) {
-  // Browser-native download — no axios timeout, shows native progress bar,
-  // doesn't block the tab, and handles large files (>10MB) reliably.
   const a = document.createElement('a')
   a.href = filesAPI.downloadUrl(file.id)
   a.download = file.name
@@ -237,7 +229,6 @@ function downloadFile(file) {
   a.click()
   document.body.removeChild(a)
   ElMessage.success('已开始下载，请查看浏览器下载进度')
-  // Refresh credit balance after a short delay (backend deducts on first hit)
   setTimeout(() => { store.fetchMe().catch(() => {}) }, 1500)
 }
 
@@ -245,14 +236,11 @@ onMounted(async () => {
   try {
     task.value = await tasksAPI.get(route.params.id)
     initAgentStatuses()
-
     if (task.value.status === 'completed' || task.value.status === 'failed') {
       loadExistingResults()
     } else if (task.value.status === 'processing') {
-      // Task was being processed (or interrupted) — show any partial saved results, don't re-trigger
       loadExistingResults()
     } else {
-      // Only 'pending' tasks start a fresh stream
       startStream()
     }
   } catch (e) {
@@ -260,64 +248,321 @@ onMounted(async () => {
     router.push('/dashboard')
   }
 })
-
 onUnmounted(() => { if (es) es.close() })
 </script>
 
 <style scoped>
-.task-detail { max-width: 900px; margin: 0 auto; }
+.task-detail { max-width: 920px; margin: 0 auto; }
 
-.page-header {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+/* ── Top bar ──────────────────────────────────────────────── */
+.top-bar {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
-.header-info { display: flex; align-items: center; gap: 10px; flex: 1; }
-.header-info h2 { font-size: 20px; color: #1a1a2e; margin: 0; }
-.header-actions { margin-left: auto; }
-
-.query-card { margin-bottom: 20px; }
-.query-label { font-size: 12px; color: #aaa; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
-.query-text { font-size: 15px; color: #333; line-height: 1.6; margin-bottom: 12px; }
-.query-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.query-time { font-size: 12px; color: #aaa; margin-left: auto; }
-
-.results-section { display: flex; flex-direction: column; gap: 20px; }
-.agent-result-block {
-  background: #fff; border-radius: 12px; overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--ybc-border);
+  border-radius: 8px;
+  color: var(--ybc-text-dim);
+  font-size: 13px; cursor: pointer;
+  transition: 0.15s; font-family: inherit;
 }
-.agent-result-header {
+.back-btn:hover { background: rgba(255, 255, 255, 0.04); color: var(--ybc-text); }
+
+.title-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 16px 20px; background: #f8f9fa; border-bottom: 1px solid #f0f0f0;
+  flex: 1; min-width: 0;
 }
-.agent-result-icon { font-size: 20px; }
-.agent-result-name { font-size: 15px; font-weight: 600; color: #222; flex: 1; }
+.title-row h1 {
+  font-size: 22px; font-weight: 800;
+  color: var(--ybc-text-strong);
+  letter-spacing: -0.3px;
+  margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
-.md-output { padding: 20px 24px; line-height: 1.8; color: #333; }
-.md-output :deep(h1) { font-size: 20px; color: #1a1a2e; margin: 16px 0 8px; }
-.md-output :deep(h2) { font-size: 17px; color: #0f3460; margin: 14px 0 6px; border-left: 3px solid #409eff; padding-left: 8px; }
-.md-output :deep(h3) { font-size: 15px; color: #333; margin: 10px 0 4px; }
-.md-output :deep(p) { margin-bottom: 10px; }
-.md-output :deep(ul), .md-output :deep(ol) { padding-left: 20px; margin-bottom: 10px; }
-.md-output :deep(li) { margin-bottom: 4px; }
-.md-output :deep(strong) { color: #1a1a2e; }
-.md-output :deep(blockquote) { border-left: 3px solid #e0e0e0; padding-left: 12px; color: #888; }
-.md-output :deep(code) { background: #f5f7fa; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
-.md-output :deep(hr) { border: none; border-top: 1px solid #f0f0f0; margin: 16px 0; }
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 11px; font-weight: 600;
+  white-space: nowrap;
+}
+.status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status-pill.status-pending    { background: rgba(255, 255, 255, 0.06); color: var(--ybc-text-muted); }
+.status-pill.status-processing { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+.status-pill.status-processing .dot { animation: ybc-pulse-dot 1s infinite; }
+.status-pill.status-completed  { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+.status-pill.status-failed     { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
 
-.waiting-placeholder { padding: 32px; text-align: center; color: #aaa; font-size: 14px; }
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--ybc-border);
+  border-radius: 8px;
+  color: var(--ybc-text);
+  font-size: 13px; cursor: pointer;
+  transition: 0.15s; font-family: inherit;
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--ybc-accent-light);
+  color: var(--ybc-accent-light);
+  background: rgba(99, 102, 241, 0.06);
+}
+.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.file-section { padding: 16px 20px; border-top: 1px solid #f5f5f5; background: #fafbfc; }
-.file-section-title { font-size: 13px; font-weight: 600; color: #666; margin-bottom: 10px; }
-.file-list { display: flex; flex-direction: column; gap: 8px; }
-.file-item {
+/* ── Query card ───────────────────────────────────────────── */
+.query-card {
+  background: var(--ybc-surface-1);
+  border: 1px solid var(--ybc-border);
+  border-radius: 16px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+}
+.query-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.query-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--ybc-text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.query-time { font-size: 11px; color: var(--ybc-text-faint); }
+
+.query-text {
+  font-size: 14px;
+  color: var(--ybc-text);
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+.query-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.agent-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ybc-border);
+  border-radius: 100px;
+  font-size: 11px;
+  color: var(--ybc-text-dim);
+}
+.agent-chip.a-strategy   { border-color: rgba(59, 130, 246, 0.3); color: #93c5fd; background: rgba(59, 130, 246, 0.08); }
+.agent-chip.a-brand      { border-color: rgba(168, 85, 247, 0.3); color: #d8b4fe; background: rgba(168, 85, 247, 0.08); }
+.agent-chip.a-logo_design{ border-color: rgba(236, 72, 153, 0.3); color: #f9a8d4; background: rgba(236, 72, 153, 0.08); }
+.agent-chip.a-operations { border-color: rgba(245, 158, 11, 0.3); color: #fcd34d; background: rgba(245, 158, 11, 0.08); }
+
+/* ── Results ───────────────────────────────────────────────── */
+.results { display: flex; flex-direction: column; gap: 16px; }
+
+.result-block {
+  background: var(--ybc-surface-1);
+  border: 1px solid var(--ybc-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.result-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; background: #fff; border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--ybc-border);
 }
+.result-icon { font-size: 20px; }
+.result-name {
+  flex: 1;
+  font-size: 14px; font-weight: 600;
+  color: var(--ybc-text-strong);
+}
+
+.stage-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 11px; font-weight: 500;
+}
+.stage-badge.waiting { background: rgba(255, 255, 255, 0.05); color: var(--ybc-text-muted); }
+.stage-badge.streaming { background: rgba(245, 158, 11, 0.12); color: #fcd34d; }
+.stage-badge.done { background: rgba(34, 197, 94, 0.12); color: #86efac; }
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ybc-pulse-dot 1s infinite;
+}
+
+/* ── Markdown output ─────────────────────────────────────── */
+.md-output {
+  padding: 22px 24px;
+  line-height: 1.8;
+  color: var(--ybc-text);
+  font-size: 14px;
+}
+.md-output :deep(h1) {
+  font-size: 20px; font-weight: 700;
+  color: var(--ybc-text-strong);
+  margin: 18px 0 10px;
+  letter-spacing: -0.3px;
+}
+.md-output :deep(h2) {
+  font-size: 17px; font-weight: 700;
+  color: #fff;
+  margin: 20px 0 8px;
+  padding-left: 12px;
+  border-left: 3px solid var(--ybc-accent);
+}
+.md-output :deep(h3) {
+  font-size: 15px; font-weight: 600;
+  color: var(--ybc-text-strong);
+  margin: 14px 0 6px;
+}
+.md-output :deep(h4) { font-size: 14px; color: var(--ybc-text-strong); margin: 12px 0 4px; }
+.md-output :deep(p) { margin-bottom: 12px; }
+.md-output :deep(ul), .md-output :deep(ol) { padding-left: 22px; margin-bottom: 12px; }
+.md-output :deep(li) { margin-bottom: 6px; }
+.md-output :deep(li::marker) { color: var(--ybc-accent-light); }
+.md-output :deep(strong) { color: var(--ybc-text-strong); font-weight: 600; }
+.md-output :deep(em) { color: var(--ybc-accent-light); font-style: normal; }
+.md-output :deep(blockquote) {
+  border-left: 3px solid var(--ybc-border);
+  padding: 6px 14px;
+  color: var(--ybc-text-dim);
+  margin: 10px 0;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 0 8px 8px 0;
+}
+.md-output :deep(code) {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--ybc-accent-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+}
+.md-output :deep(pre) {
+  background: #0a0a0f;
+  border: 1px solid var(--ybc-border);
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.md-output :deep(pre code) {
+  background: transparent;
+  color: var(--ybc-text);
+  padding: 0;
+}
+.md-output :deep(hr) {
+  border: none;
+  height: 1px;
+  background: var(--ybc-border);
+  margin: 20px 0;
+}
+.md-output :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.md-output :deep(th), .md-output :deep(td) {
+  border: 1px solid var(--ybc-border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.md-output :deep(th) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ybc-text-strong);
+  font-weight: 600;
+}
+.md-output :deep(a) { color: var(--ybc-accent-light); text-decoration: none; }
+.md-output :deep(a:hover) { text-decoration: underline; }
+
+.placeholder {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--ybc-text-muted);
+  font-size: 13px;
+}
+.placeholder-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.6; }
+
+/* ── File section ──────────────────────────────────────── */
+.file-section {
+  padding: 16px 20px;
+  border-top: 1px solid var(--ybc-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.file-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  color: var(--ybc-text-muted);
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+.file-list { display: flex; flex-direction: column; gap: 6px; }
+.file-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ybc-border);
+  border-radius: 10px;
+  transition: 0.15s;
+}
+.file-row:hover { border-color: rgba(99, 102, 241, 0.3); }
 .file-icon { font-size: 18px; }
-.file-name { flex: 1; font-size: 13px; color: #333; }
-.file-credits { font-size: 12px; color: #f5a623; font-weight: 600; background: #fff8e6; padding: 2px 8px; border-radius: 4px; }
+.file-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--ybc-text);
+  word-break: break-all;
+}
+.cost-pill {
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 10px; font-weight: 600;
+  white-space: nowrap;
+}
+.cost-pill.cost-free {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+.cost-pill.cost-paid {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+
+.download-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+  color: var(--ybc-accent-light);
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+.download-btn:hover {
+  background: var(--ybc-accent);
+  color: #fff;
+  border-color: var(--ybc-accent);
+}
+
+.error-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  margin-top: 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 13px;
+}
 
 @keyframes spin { to { transform: rotate(360deg); } }
-.spin { animation: spin 1s linear infinite; }
 </style>
