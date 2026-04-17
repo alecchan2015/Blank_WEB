@@ -137,6 +137,10 @@ export const adminAPI = {
   getMembershipConfig:  () => api.get('/admin/membership/config'),
   saveMembershipConfig: (data) => api.put('/admin/membership/config', data),
 
+  // ─── Credits cost config ───
+  getCreditsConfig:   () => api.get('/admin/credits-config'),
+  saveCreditsConfig:  (data) => api.put('/admin/credits-config', data),
+
   // ─── Payment orders + providers ───
   getOrders:            (status) => api.get('/admin/payment/orders', { params: status ? { status } : {} }),
   confirmOrder:         (orderNo) => api.post(`/admin/payment/orders/${orderNo}/confirm`),

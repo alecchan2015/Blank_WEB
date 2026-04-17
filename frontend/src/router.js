@@ -36,6 +36,7 @@ const routes = [
       { path: 'membership', component: () => import('./views/admin/Membership.vue') },
       { path: 'orders', component: () => import('./views/admin/Orders.vue') },
       { path: 'payment-providers', component: () => import('./views/admin/PaymentProviders.vue') },
+      { path: 'credits-config', component: () => import('./views/admin/CreditsConfig.vue') },
       { path: 'tasks', component: () => import('./views/admin/Tasks.vue') },
       { path: 'token-usage', component: () => import('./views/admin/TokenUsage.vue') },
       { path: 'logo-provider', component: () => import('./views/admin/LogoProvider.vue') },

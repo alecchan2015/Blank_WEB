@@ -33,6 +33,9 @@
         <el-menu-item index="/admin/payment-providers">
           <el-icon><CreditCard /></el-icon><span>支付渠道</span>
         </el-menu-item>
+        <el-menu-item index="/admin/credits-config">
+          <el-icon><Coin /></el-icon><span>积分配置</span>
+        </el-menu-item>
         <el-menu-item index="/admin/tasks">
           <el-icon><List /></el-icon><span>任务记录</span>
         </el-menu-item>

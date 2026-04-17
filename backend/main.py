@@ -777,7 +777,10 @@ async def stream_task(
                     full_content = event["full_content"]
                     agent_contents[agent_type] = full_content
 
-                    # Save TaskResult
+                    # Pull download-cost config once per agent_done event
+                    from services.credits_settings import get_download_credits
+
+                    # Save TaskResult (text record, no file)
                     tr = TaskResult(
                         task_id=task.id,
                         agent_type=agent_type,
@@ -801,7 +804,7 @@ async def stream_task(
                             file_path=md_path,
                             file_type="md",
                             file_name=md_name,
-                            download_credits=0,
+                            download_credits=get_download_credits(db, "md"),
                         )
                         db.add(md_result)
                         db.commit()
@@ -821,7 +824,7 @@ async def stream_task(
                             file_path=pdf_path,
                             file_type="pdf",
                             file_name=pdf_name,
-                            download_credits=0,
+                            download_credits=get_download_credits(db, "pdf"),
                         )
                         db.add(pdf_result)
                         db.commit()
@@ -842,7 +845,7 @@ async def stream_task(
                             file_path=pptx_path,
                             file_type="pptx",
                             file_name=pptx_name,
-                            download_credits=0,
+                            download_credits=get_download_credits(db, "pptx"),
                         )
                         db.add(pptx_result)
                         db.commit()
@@ -873,7 +876,7 @@ async def stream_task(
                                 file_path=png_path,
                                 file_type="png",
                                 file_name=png_name,
-                                download_credits=0,
+                                download_credits=get_download_credits(db, "png"),
                             )
                             db.add(png_result)
                             db.commit()
@@ -894,7 +897,7 @@ async def stream_task(
                                 file_path=psd_path,
                                 file_type="psd",
                                 file_name=psd_name,
-                                download_credits=0,
+                                download_credits=get_download_credits(db, "psd"),
                             )
                             db.add(psd_result)
                             db.commit()
@@ -928,6 +931,7 @@ async def stream_task(
                 try:
                     from services.logo_providers import generate_via_providers, build_logo_prompt
                     from services.logo_settings import load_config as load_logo_config
+                    from services.credits_settings import get_download_credits
 
                     logo_cfg = load_logo_config(db)
                     brand_name = task.brand_name or "品牌"
@@ -1015,7 +1019,7 @@ async def stream_task(
                                         file_path=fpath,
                                         file_type="png",
                                         file_name=fname,
-                                        download_credits=0,
+                                        download_credits=get_download_credits(db, "logo_png"),
                                     )
                                     db.add(logo_result)
                                     db.commit()
@@ -1074,7 +1078,7 @@ async def stream_task(
                                     file_path=psd_fpath,
                                     file_type="psd",
                                     file_name=psd_fname,
-                                    download_credits=0,
+                                    download_credits=get_download_credits(db, "logo_psd"),
                                 )
                                 db.add(psd_result)
                                 db.commit()
@@ -2043,6 +2047,27 @@ def admin_adjust_user_tier(
         db.commit()
     db.refresh(user)
     return user
+
+
+# ─────────────────────────────────────────────
+# Admin: Credits cost configuration
+# ─────────────────────────────────────────────
+
+@app.get("/api/admin/credits-config", tags=["admin"])
+def admin_get_credits_config(db: Session = Depends(get_db), _=Depends(get_current_admin)):
+    """Return download-credit costs per file type + logo generation cost."""
+    from services.credits_settings import load_config
+    return load_config(db)
+
+
+@app.put("/api/admin/credits-config", tags=["admin"])
+def admin_update_credits_config(
+    body: dict,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_admin),
+):
+    from services.credits_settings import save_config
+    return save_config(db, body or {})
 
 
 @app.get("/api/admin/tasks", response_model=List[TaskOut], tags=["admin"])
