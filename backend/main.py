@@ -3146,23 +3146,48 @@ def download_poster(
 @app.get("/api/poster/file/{fname}", tags=["poster"])
 def fetch_poster_file(
     fname: str,
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    request: Request = None,
 ):
-    """Serve a poster image file by filename (used inline by the frontend preview)."""
-    # Safety: deny traversal
+    """Serve a poster image file for inline <img> preview.
+
+    Accepts JWT via ?token= query (browsers can't set Authorization on
+    <img src>) OR via Authorization header for programmatic access.
+    """
+    from jose import jwt, JWTError
+    from auth import SECRET_KEY, ALGORITHM
+
+    jwt_token = token
+    if not jwt_token and request is not None:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            jwt_token = auth_header[7:]
+    if not jwt_token:
+        raise HTTPException(401, "未提供身份凭证")
+    try:
+        payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        current_user = db.query(User).filter(User.username == username).first()
+        if not current_user or not current_user.is_active:
+            raise HTTPException(401, "身份验证失败")
+    except JWTError:
+        raise HTTPException(401, "身份验证失败")
+
+    # Path-traversal safety
     if "/" in fname or ".." in fname:
         raise HTTPException(400, "invalid filename")
     fpath = os.path.join(UPLOAD_DIR, fname)
     if not os.path.exists(fpath):
         raise HTTPException(404, "not found")
-    # Verify the file belongs to this user via the poster_generations table
-    gen = db.query(PosterGeneration).filter(
-        PosterGeneration.user_id == current_user.id,
-        PosterGeneration.png_path.like(f"%/{fname}"),
-    ).first()
-    if not gen:
-        raise HTTPException(403, "not authorized")
+    # Admins can see any poster; regular users only their own
+    if current_user.role != "admin":
+        gen = db.query(PosterGeneration).filter(
+            PosterGeneration.user_id == current_user.id,
+            PosterGeneration.png_path.like(f"%/{fname}"),
+        ).first()
+        if not gen:
+            raise HTTPException(403, "not authorized")
     return FileResponse(path=fpath, filename=fname, media_type="image/png")
 
 

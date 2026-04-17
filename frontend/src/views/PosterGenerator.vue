@@ -378,21 +378,22 @@ function closeEventSource() {
   if (eventSource) { eventSource.close(); eventSource = null }
 }
 
-function posterImgUrl(v) {
-  // Backend returns png_url like "/api/poster/file/{fname}"
+function _appendToken(url) {
+  if (!url) return ''
+  // External URLs (TOS/ARK, etc.) — browser can load directly, don't touch
+  if (/^https?:\/\//i.test(url)) return url
+  // Local /api/... URLs need our JWT so <img> can authenticate
   const token = localStorage.getItem('token') || ''
-  if (!v?.png_url) return ''
-  // If url is already an /api path, append token
-  const sep = v.png_url.includes('?') ? '&' : '?'
-  return `${v.png_url}${sep}_t=${encodeURIComponent(token.slice(0, 8))}`
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}token=${encodeURIComponent(token)}`
+}
+
+function posterImgUrl(v) {
+  return _appendToken(v?.png_url || '')
 }
 
 function historyImgUrl(item) {
-  const token = localStorage.getItem('token') || ''
-  const url = item.variants?.[0]?.png_url || ''
-  if (!url) return ''
-  const sep = url.includes('?') ? '&' : '?'
-  return `${url}${sep}_t=${encodeURIComponent(token.slice(0, 8))}`
+  return _appendToken(item.variants?.[0]?.png_url || '')
 }
 
 function handleDownload() {
@@ -812,11 +813,41 @@ select.field-input option { background: #12121a; color: var(--ybc-text); }
   box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.25);
 }
 .variant-preview {
+  /* Fixed canvas — show whole image regardless of aspect ratio
+     (portrait/square/landscape all supported, no distortion) */
   aspect-ratio: 9 / 16;
-  background: #000;
+  background:
+    linear-gradient(135deg, #0a0a0f 0%, #1a1a24 100%);
   display: flex; align-items: center; justify-content: center;
+  padding: 4px;
+  position: relative;
+  overflow: hidden;
 }
-.variant-preview img { width: 100%; height: 100%; object-fit: cover; }
+.variant-preview::before {
+  /* subtle checkerboard so transparent-ish PNGs are visible */
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.02) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.02) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  pointer-events: none;
+}
+.variant-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;       /* show full image, no cropping/stretch */
+  display: block;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  border-radius: 4px;
+}
 .variant-label {
   padding: 8px; text-align: center;
   font-size: 12px; color: var(--ybc-text-dim);
@@ -880,12 +911,18 @@ select.field-input option { background: #12121a; color: var(--ybc-text); }
 .history-preview {
   width: 56px; height: 96px;
   border-radius: 6px;
-  background: #000;
+  background: linear-gradient(135deg, #0a0a0f, #1a1a24);
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.history-preview img { width: 100%; height: 100%; object-fit: cover; }
+.history-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
 .history-placeholder { font-size: 22px; color: var(--ybc-text-muted); }
 
 .history-info { flex: 1; min-width: 0; }
