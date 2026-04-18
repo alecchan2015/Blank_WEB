@@ -1,5 +1,31 @@
 <template>
   <div class="task-detail">
+    <!-- Loading skeleton -->
+    <div v-if="!task" class="skeleton-wrap">
+      <div class="sk-top-bar">
+        <div class="sk-line sk-back"></div>
+        <div class="sk-line sk-title"></div>
+      </div>
+      <div class="sk-card">
+        <div class="sk-line sk-label"></div>
+        <div class="sk-line sk-text-long"></div>
+        <div class="sk-line sk-text-mid"></div>
+        <div class="sk-chips">
+          <span class="sk-chip"></span><span class="sk-chip"></span><span class="sk-chip"></span>
+        </div>
+      </div>
+      <div class="sk-card" v-for="i in 2" :key="i">
+        <div class="sk-result-head">
+          <div class="sk-line sk-label"></div>
+          <div class="sk-line sk-badge"></div>
+        </div>
+        <div class="sk-line sk-text-long"></div>
+        <div class="sk-line sk-text-long"></div>
+        <div class="sk-line sk-text-short"></div>
+      </div>
+    </div>
+
+    <template v-else>
     <!-- Top bar -->
     <div class="top-bar">
       <button class="back-btn" @click="$router.push('/dashboard')">
@@ -103,6 +129,7 @@
       <span>⚠️</span>
       <span>{{ error }}</span>
     </div>
+    </template>
   </div>
 </template>
 
@@ -241,6 +268,8 @@ onMounted(async () => {
     } else if (task.value.status === 'processing') {
       loadExistingResults()
     } else {
+      // pending — ensure status grid renders immediately before streaming
+      initAgentStatuses()
       startStream()
     }
   } catch (e) {
@@ -275,6 +304,7 @@ onUnmounted(() => { if (es) es.close() })
 .title-row {
   display: flex; align-items: center; gap: 10px;
   flex: 1; min-width: 0;
+  max-width: calc(100% - 160px);  /* leave room for status pill + action */
 }
 .title-row h1 {
   font-size: 22px; font-weight: 800;
@@ -282,6 +312,65 @@ onUnmounted(() => { if (es) es.close() })
   letter-spacing: -0.3px;
   margin: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+/* ── Loading skeleton ───────────────────────────────────── */
+.skeleton-wrap {
+  display: flex; flex-direction: column; gap: 16px;
+  animation: ybc-fade-up 0.25s;
+}
+.sk-top-bar {
+  display: flex; align-items: center; gap: 14px;
+}
+.sk-card {
+  background: var(--ybc-surface-1);
+  border: 1px solid var(--ybc-border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sk-result-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 4px;
+}
+.sk-line {
+  height: 14px;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: sk-shimmer 1.5s infinite linear;
+}
+.sk-back { width: 60px; }
+.sk-title { width: 180px; height: 22px; }
+.sk-label { width: 80px; height: 11px; }
+.sk-badge { width: 56px; height: 20px; border-radius: 100px; }
+.sk-text-long { width: 92%; }
+.sk-text-mid  { width: 72%; }
+.sk-text-short { width: 55%; }
+.sk-chips { display: flex; gap: 6px; margin-top: 6px; }
+.sk-chip {
+  width: 64px; height: 20px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.04);
+  animation: sk-shimmer 1.5s infinite linear;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+}
+@keyframes sk-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .status-pill {

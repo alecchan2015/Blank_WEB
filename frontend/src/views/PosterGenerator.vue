@@ -26,19 +26,38 @@
           maxlength="40" />
       </div>
 
-      <!-- Event keyword with chip suggestions (optional) -->
+      <!-- Event keyword — categorized picker with search (optional) -->
       <div class="field">
         <label>主题关键词 <span class="opt">（选填，不填则默认「品牌宣传」）</span></label>
         <input v-model="form.eventKeyword" class="field-input"
-          placeholder="例：谷雨、中秋、新品上市、年终大促..." maxlength="20" />
-        <div class="chip-group-label">快速选择</div>
-        <div class="chip-groups">
-          <div v-for="group in keywordGroups" :key="group.title" class="chip-group">
-            <div class="chip-group-title">{{ group.title }}</div>
-            <div class="chips">
-              <button v-for="kw in group.items" :key="kw"
-                class="chip" :class="{ active: form.eventKeyword === kw }"
-                @click="form.eventKeyword = kw">{{ kw }}</button>
+          placeholder="手动输入或在下方分类中选择..." maxlength="20" />
+
+        <div class="kw-browser">
+          <!-- Category tabs -->
+          <div class="kw-tabs">
+            <button v-for="cat in keywordCategories" :key="cat.key"
+              class="kw-tab" :class="{ active: activeCategory === cat.key }"
+              @click="activeCategory = cat.key">
+              <span class="kw-tab-icon">{{ cat.icon }}</span>
+              <span class="kw-tab-label">{{ cat.label }}</span>
+              <span class="kw-tab-count">{{ cat.items.length }}</span>
+            </button>
+          </div>
+
+          <!-- Search bar for the current category -->
+          <div class="kw-search-row">
+            <input v-model="kwSearch" class="kw-search"
+              placeholder="在当前分类中搜索关键词..." />
+            <span class="kw-hint">已显示 {{ filteredKeywords.length }} 项</span>
+          </div>
+
+          <!-- Keyword grid -->
+          <div class="kw-grid">
+            <button v-for="kw in filteredKeywords" :key="kw"
+              class="kw-item" :class="{ active: form.eventKeyword === kw }"
+              @click="form.eventKeyword = kw">{{ kw }}</button>
+            <div v-if="!filteredKeywords.length" class="kw-empty">
+              当前分类无匹配项，可直接在上方输入框自定义
             </div>
           </div>
         </div>
@@ -253,40 +272,116 @@ const styles = [
   { value: 'heritage', icon: '🏮', label: '东方古韵' },
 ]
 
-const keywordGroups = [
+const keywordCategories = [
   {
-    title: '🌱 春季节气',
-    items: ['立春', '雨水', '惊蛰', '春分', '清明', '谷雨'],
+    key: 'seasons', icon: '🌿', label: '二十四节气',
+    items: [
+      // 春
+      '立春', '雨水', '惊蛰', '春分', '清明', '谷雨',
+      // 夏
+      '立夏', '小满', '芒种', '夏至', '小暑', '大暑',
+      // 秋
+      '立秋', '处暑', '白露', '秋分', '寒露', '霜降',
+      // 冬
+      '立冬', '小雪', '大雪', '冬至', '小寒', '大寒',
+    ],
   },
   {
-    title: '☀️ 夏季节气',
-    items: ['立夏', '小满', '芒种', '夏至', '小暑', '大暑'],
+    key: 'festivals', icon: '🎉', label: '传统节日',
+    items: [
+      '春节', '除夕', '元宵', '龙抬头', '上巳', '寒食', '清明祭',
+      '端午', '七夕', '中元', '中秋', '重阳', '下元', '腊八',
+      '小年', '元旦', '开工大吉', '迎春纳福',
+    ],
   },
   {
-    title: '🍂 秋季节气',
-    items: ['立秋', '处暑', '白露', '秋分', '寒露', '霜降'],
+    key: 'modern', icon: '💝', label: '现代节日',
+    items: [
+      '元旦', '情人节', '妇女节', '女神节', '植树节', '愚人节',
+      '劳动节', '青年节', '母亲节', '儿童节', '父亲节', '建军节',
+      '教师节', '中秋节', '国庆节', '万圣节', '感恩节', '圣诞节',
+      '平安夜', '跨年夜', '白色情人节', '520 告白日',
+    ],
   },
   {
-    title: '❄️ 冬季节气',
-    items: ['立冬', '小雪', '大雪', '冬至', '小寒', '大寒'],
+    key: 'marketing', icon: '🛍️', label: '营销节点',
+    items: [
+      // 电商大促
+      '年货节', '女王节', '开学季', '国货节', '618 大促', '618 狂欢',
+      '818 发烧节', '99 划算节', '双 11', '双 12', '99 超级粉丝节',
+      '年终盛典', '双旦季', '元宵大促',
+      // 活动类型
+      '新品发布', '新品首发', '限时特惠', '清仓大促', '抢购专场',
+      '预售开启', '拼团狂欢', '秒杀专场', '闪购特卖', '满减活动',
+      '会员日', 'VIP 专享', '品牌日', '超级品牌日',
+      // 店铺里程碑
+      '开业盛典', '新店开业', '周年庆典', '十年风华',
+      '门店焕新', '旗舰店开业', '入驻庆典',
+    ],
   },
   {
-    title: '🎉 传统节日',
-    items: ['春节', '元宵', '端午', '七夕', '中秋', '重阳', '腊八', '冬至'],
+    key: 'furniture', icon: '🛋️', label: '家具建材',
+    items: [
+      // 产品类
+      '沙发焕新', '床垫专场', '茶几臻选', '餐桌大促',
+      '衣柜定制', '书柜专场', '全屋定制', '整装设计',
+      '智能家具', '红木经典', '实木臻品', '北欧简约',
+      '轻奢系列', '新中式美学', '美式风范', '日式禅意',
+      // 建材类
+      '春季装修节', '夏季装修季', '秋冬装修狂欢', '地板专场',
+      '瓷砖专场', '卫浴特惠', '涂料焕新', '灯饰美学',
+      '门窗升级', '五金精选', '窗帘布艺', '墙纸墙布',
+      '橱柜定制', '吊顶专场', '楼梯定制', '石材臻选',
+      // 场景主题
+      '新居入住', '乔迁之喜', '开工吉日', '竣工仪式',
+      '软装搭配', '空间改造', '旧屋翻新', '精装美学',
+      '极简生活', '慢生活', '高定家居', '设计师臻选',
+      '一站式购齐', '原木家居', '匠心工艺',
+    ],
   },
   {
-    title: '💝 现代节日',
-    items: ['情人节', '女神节', '母亲节', '父亲节', '儿童节', '国庆', '圣诞'],
+    key: 'lifestyle', icon: '🌅', label: '生活方式',
+    items: [
+      '质造生活', '美好家居', '匠心如初', '家的温度',
+      '归心之所', '舒适空间', '理想居所', '烟火人间',
+      '闲适午后', '晨光初现', '黄昏薄暮', '静谧时光',
+      '周末放空', '家庭时光', '亲子乐园', '独处美学',
+      '茶香书韵', '阅读时光', '慢煮光阴', '咖啡时光',
+      '治愈系', '温暖色调', '诗意栖居', '返璞归真',
+    ],
   },
   {
-    title: '🛍️ 营销节点',
-    items: ['新品上市', '限时特惠', '618 大促', '双 11', '双 12', '周年庆', '年终大促', '开业庆典'],
+    key: 'scenes', icon: '🏠', label: '应用场景',
+    items: [
+      '客厅美学', '卧室温馨', '书房雅韵', '餐厨烟火',
+      '儿童房', '玄关第一印象', '阳台花园', '浴室焕新',
+      '书桌一隅', '茶室禅意', '衣帽间', '储藏间',
+      '小户型优雅', '大平层豪宅', '别墅臻品', '民宿美学',
+      '办公空间', '会客厅', '咖啡厅', '精品酒店',
+    ],
   },
   {
-    title: '🏠 家居场景',
-    items: ['新居入住', '乔迁之喜', '精装美学', '空间改造', '极简生活'],
+    key: 'vibe', icon: '✨', label: '情绪氛围',
+    items: [
+      '新年伊始', '春意盎然', '夏日清凉', '金秋收获', '冬日温暖',
+      '年末盘点', '跨年时刻', '感恩回馈', '开工纳福',
+      '团圆喜庆', '浪漫氛围', '文艺清新', '治愈系',
+      '国潮东方', '复古港风', '赛博未来', '极简禅意',
+      '暖阳午后', '月色阑珊', '晨雾朦胧', '细雨如丝',
+    ],
   },
 ]
+
+// Active category + search state
+const activeCategory = ref('seasons')
+const kwSearch = ref('')
+const filteredKeywords = computed(() => {
+  const cat = keywordCategories.find(c => c.key === activeCategory.value)
+  if (!cat) return []
+  const q = kwSearch.value.trim().toLowerCase()
+  if (!q) return cat.items
+  return cat.items.filter(k => k.toLowerCase().includes(q))
+})
 
 const creditCost = computed(() => 5)
 const canGenerate = computed(() =>
@@ -541,39 +636,106 @@ onUnmounted(closeEventSource)
 .req { color: var(--ybc-danger); }
 .opt { color: var(--ybc-text-faint); font-weight: 400; font-size: 11px; margin-left: 4px; }
 
-/* Keyword chip suggestions */
-.chip-group-label {
-  font-size: 11px;
-  color: var(--ybc-text-muted);
-  margin: 14px 0 8px;
-  letter-spacing: 0.5px;
-}
-.chip-groups {
-  display: flex; flex-direction: column;
-  gap: 10px;
+/* Keyword browser — categorized picker with search */
+.kw-browser {
+  margin-top: 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--ybc-border);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  overflow: hidden;
 }
-.chip-group {
-  display: flex; align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
+
+.kw-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-.chip-group-title {
+.kw-tabs::-webkit-scrollbar { display: none; }
+
+.kw-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px 10px 0 0;
+  color: var(--ybc-text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+.kw-tab:hover { color: var(--ybc-text); background: rgba(255, 255, 255, 0.03); }
+.kw-tab.active {
+  color: var(--ybc-text-strong);
+  background: rgba(236, 72, 153, 0.08);
+}
+.kw-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 14px; right: 14px; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #ec4899, #a855f7);
+  border-radius: 2px 2px 0 0;
+}
+.kw-tab-icon { font-size: 14px; }
+.kw-tab-count {
+  font-size: 10px;
+  color: var(--ybc-text-faint);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 6px;
+  border-radius: 100px;
+  font-weight: 600;
+}
+.kw-tab.active .kw-tab-count {
+  background: rgba(236, 72, 153, 0.15);
+  color: #f9a8d4;
+}
+
+.kw-search-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ybc-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+.kw-search {
+  flex: 1;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ybc-border);
+  border-radius: 8px;
+  color: var(--ybc-text);
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+.kw-search:focus { border-color: rgba(236, 72, 153, 0.4); }
+.kw-search::placeholder { color: var(--ybc-text-faint); }
+.kw-hint {
   font-size: 11px;
   color: var(--ybc-text-muted);
-  flex-shrink: 0;
-  width: 84px;
-  padding-top: 5px;
+  white-space: nowrap;
 }
-.chips {
+
+.kw-grid {
   display: flex; flex-wrap: wrap; gap: 6px;
-  flex: 1;
+  padding: 12px 14px 14px;
+  max-height: 280px;
+  overflow-y: auto;
 }
-.chip {
-  padding: 4px 12px;
+.kw-grid::-webkit-scrollbar { width: 6px; }
+.kw-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.kw-item {
+  padding: 5px 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--ybc-border);
   border-radius: 100px;
@@ -583,16 +745,24 @@ onUnmounted(closeEventSource)
   transition: 0.15s;
   font-family: inherit;
 }
-.chip:hover {
+.kw-item:hover {
   background: rgba(236, 72, 153, 0.1);
   color: #f9a8d4;
   border-color: rgba(236, 72, 153, 0.35);
+  transform: translateY(-1px);
 }
-.chip.active {
+.kw-item.active {
   background: linear-gradient(135deg, rgba(236, 72, 153, 0.25), rgba(168, 85, 247, 0.25));
   color: #fff;
   border-color: rgba(236, 72, 153, 0.5);
   box-shadow: 0 0 0 1px rgba(236, 72, 153, 0.15);
+}
+.kw-empty {
+  width: 100%;
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ybc-text-muted);
 }
 
 .field-input {

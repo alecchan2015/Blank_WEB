@@ -23,7 +23,7 @@
         <!-- Nav -->
         <nav class="nav">
           <router-link v-for="item in navItems" :key="item.path" :to="item.path"
-            class="nav-item" :class="{ active: route.path === item.path }">
+            class="nav-item" :class="{ active: isNavActive(item.path) }">
             <span class="nav-icon"><el-icon><component :is="item.icon" /></el-icon></span>
             <span class="nav-label">{{ item.label }}</span>
             <span v-if="item.badge" class="nav-badge" :class="`tier-${item.badgeType}`">{{ item.badge }}</span>
@@ -35,8 +35,8 @@
           <!-- Credits chip -->
           <div class="credit-chip">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <path d="M8 4v4l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M8 1.5l2 4.5 5 .5-3.8 3.2 1.2 4.8-4.4-2.5-4.4 2.5 1.2-4.8L1 6.5l5-.5 2-4.5z"
+                fill="currentColor" stroke="currentColor" stroke-width="0.5" stroke-linejoin="round"/>
             </svg>
             <span>{{ store.user?.credits ?? 0 }}</span>
             <span class="credit-unit">积分</span>
@@ -144,6 +144,16 @@ const pageTitle = computed(() => {
 })
 
 function toggleSidebar() { mobileOpen.value = !mobileOpen.value }
+
+function isNavActive(path) {
+  const current = route.path
+  if (current === path) return true
+  // /tasks/:id and /tasks/new both highlight 工作台
+  if (path === '/dashboard' && (current.startsWith('/tasks/') || current === '/tasks/new')) return true
+  // /payment/:order_no highlights 我的订单
+  if (path === '/orders' && current.startsWith('/payment/')) return true
+  return false
+}
 
 async function logout() {
   await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })

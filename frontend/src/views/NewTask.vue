@@ -67,7 +67,7 @@
         </div>
 
         <div class="quick-row">
-          <button class="quick-btn" @click="selectAll">全选（四专家协作）</button>
+          <button class="quick-btn" @click="selectAll">全选（{{ agents.length }} 专家协作）</button>
           <button class="quick-btn" @click="form.agents_selected = []">清空</button>
         </div>
       </div>

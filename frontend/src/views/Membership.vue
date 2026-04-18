@@ -43,7 +43,23 @@
     <div class="plans-section">
       <h2 class="section-title">选择会员套餐</h2>
 
-      <div v-for="tier in ['vip', 'vvip', 'vvvip']" :key="tier" class="tier-group">
+      <!-- Skeleton while loading -->
+      <div v-if="!plans.length" class="skeleton-plans">
+        <div v-for="i in 3" :key="i" class="sk-tier">
+          <div class="sk-line sk-head"></div>
+          <div class="sk-cards">
+            <div v-for="j in 2" :key="j" class="sk-card">
+              <div class="sk-line sk-name"></div>
+              <div class="sk-line sk-price"></div>
+              <div class="sk-line sk-line-sm"></div>
+              <div class="sk-line sk-line-sm"></div>
+              <div class="sk-line sk-btn"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else v-for="tier in ['vip', 'vvip', 'vvvip']" :key="tier" class="tier-group">
         <div class="tier-heading" :class="`heading-${tier}`">
           <span class="icon">{{ tierIcon(tier) }}</span>
           <span class="label">{{ tierLabel(tier) }}</span>
@@ -120,9 +136,15 @@
                 <span class="ch-label">{{ channelLabel(ch) }}</span>
                 <span class="ch-check" :class="{ show: selectedChannel === ch }">✓</span>
               </button>
+              <div v-if="!enabledChannels.length" class="channel-empty">
+                <div class="empty-icon">🏦</div>
+                <div class="empty-title">当前无可用支付渠道</div>
+                <div class="empty-desc">请联系管理员开启支付渠道或稍后再试</div>
+              </div>
             </div>
 
-            <button class="confirm-btn" :disabled="!selectedChannel || buying" @click="confirmPurchase">
+            <button v-if="enabledChannels.length"
+              class="confirm-btn" :disabled="!selectedChannel || buying" @click="confirmPurchase">
               {{ buying ? '处理中…' : '确认支付' }}
             </button>
           </div>
@@ -355,6 +377,37 @@ onMounted(loadAll)
 
 .tier-group { margin-bottom: 28px; }
 
+/* Skeleton */
+.skeleton-plans { display: flex; flex-direction: column; gap: 20px; }
+.sk-tier { display: flex; flex-direction: column; gap: 12px; }
+.sk-head { height: 42px; width: 260px; border-radius: 12px; }
+.sk-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.sk-card {
+  padding: 24px 22px;
+  background: var(--ybc-surface-1);
+  border: 1px solid var(--ybc-border);
+  border-radius: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sk-line {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: sk-pulse 1.5s infinite linear;
+  border-radius: 4px;
+  height: 14px;
+}
+.sk-card .sk-name { width: 60%; }
+.sk-card .sk-price { width: 70%; height: 28px; margin: 4px 0; }
+.sk-line-sm { width: 85%; height: 10px; }
+.sk-card .sk-btn { height: 38px; border-radius: 10px; margin-top: 6px; }
+@keyframes sk-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .tier-heading {
   display: flex; align-items: center; gap: 10px;
   margin-bottom: 14px;
@@ -570,6 +623,18 @@ onMounted(loadAll)
   transition: 0.15s;
 }
 .ch-check.show { opacity: 1; }
+
+.channel-empty {
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--ybc-text-muted);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed var(--ybc-border);
+  border-radius: 12px;
+}
+.channel-empty .empty-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.6; }
+.channel-empty .empty-title { font-size: 13px; color: var(--ybc-text); font-weight: 500; }
+.channel-empty .empty-desc { font-size: 12px; margin-top: 4px; }
 
 .confirm-btn {
   width: 100%;

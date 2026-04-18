@@ -1,13 +1,19 @@
 <template>
   <div class="logo-generator">
     <!-- Page Header -->
-    <div class="page-header">
-      <el-button text @click="$router.push('/dashboard')">
-        <el-icon><ArrowLeft /></el-icon> 返回
-      </el-button>
-      <div class="header-info">
-        <h2>Logo 智能生成</h2>
+    <button class="back-btn" @click="$router.push('/dashboard')">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M10 4L6 8l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>工作台</span>
+    </button>
+    <div class="page-hero">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        <span>AI Logo Studio</span>
       </div>
+      <h1>Logo 智能生成</h1>
+      <p>AI 驱动的品牌 Logo 设计 · 输出 PNG / PSD / 品牌套件 ZIP</p>
     </div>
 
     <!-- Form Section -->
@@ -191,40 +197,41 @@
 
       <!-- Download Buttons -->
       <div class="download-section">
-        <el-button
-          type="primary"
-          :icon="Download"
-          @click="handleDownload('png')"
-          :loading="downloading === 'png'"
-        >
-          下载 PNG（透明背景）
-        </el-button>
-        <el-button
-          type="success"
-          :icon="Download"
-          @click="handleDownload('psd')"
-          :loading="downloading === 'psd'"
-        >
-          下载 PSD（分层文件）
-        </el-button>
-        <el-button
-          type="warning"
-          :icon="Download"
-          @click="handleDownload('zip')"
-          :loading="downloading === 'zip'"
-        >
-          下载品牌包 ZIP（全格式）
-        </el-button>
+        <button class="dl-btn primary" @click="handleDownload('png')">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          PNG · 透明背景
+        </button>
+        <button class="dl-btn" @click="handleDownload('psd')">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          PSD · 分层源文件
+        </button>
+        <button class="dl-btn" @click="handleDownload('zip')">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v9M4 7l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          品牌包 ZIP · 全格式
+        </button>
       </div>
 
       <!-- Regenerate -->
       <div class="regenerate-section">
-        <el-button :icon="Refresh" round @click="handleReset">重新生成</el-button>
+        <button class="ghost-reset" @click="handleReset">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M13 3v4h-4M3 13v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4.2 6a5 5 0 018-1.5L13 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          重新生成
+        </button>
       </div>
     </el-card>
 
-    <!-- History Section -->
-    <el-card class="history-card" shadow="never">
+    <!-- History Section (hide until there's at least one item) -->
+    <el-card v-if="history.length || historyLoading" class="history-card" shadow="never">
       <template #header>
         <div class="history-header">
           <span class="history-title">📋 生成历史</span>
@@ -554,29 +561,45 @@ onUnmounted(() => {
 }
 
 /* ── Page Header ─────────────────────────────── */
-.page-header {
-  display: flex; align-items: center; gap: 12px;
-  margin-bottom: 20px;
-}
-.page-header :deep(.el-button) {
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px;
   background: transparent;
   border: 1px solid var(--ybc-border);
   border-radius: 8px;
   color: var(--ybc-text-dim);
   font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+  margin-bottom: 20px;
 }
-.page-header :deep(.el-button:hover) {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--ybc-text);
+.back-btn:hover { background: rgba(255, 255, 255, 0.04); color: var(--ybc-text); }
+
+.page-hero { text-align: center; margin-bottom: 28px; padding: 12px 0; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  border-radius: 100px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--ybc-accent-light);
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
 }
-.header-info { flex: 1; }
-.header-info h2 {
-  font-size: 22px; font-weight: 800;
+.hero-badge .dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #22c55e;
+  animation: ybc-pulse-dot 2s infinite;
+}
+.page-hero h1 {
+  font-size: 28px; font-weight: 800;
   color: var(--ybc-text-strong);
-  letter-spacing: -0.3px;
-  margin: 0;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
 }
+.page-hero p { font-size: 14px; color: var(--ybc-text-dim); }
 
 /* ── Form Card ──────────────────────────────── */
 .form-card,
@@ -765,24 +788,57 @@ onUnmounted(() => {
 
 /* ── Download buttons ───────────────────────── */
 .download-section {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
-  flex-wrap: wrap;
   padding-top: 16px;
   border-top: 1px solid var(--ybc-border);
 }
-.download-section :deep(.el-button) {
-  flex: 1;
-  min-width: 180px;
+.dl-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 10px 14px;
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--ybc-border);
+  border-radius: 10px;
+  color: var(--ybc-text);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+.dl-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--ybc-accent-light);
+  color: var(--ybc-accent-light);
+}
+.dl-btn.primary {
+  background: var(--ybc-gradient-primary);
+  border-color: transparent;
+  color: #fff;
+}
+.dl-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+  color: #fff;
 }
 
 .regenerate-section {
   margin-top: 14px;
-  display: flex;
-  justify-content: center;
+  display: flex; justify-content: center;
 }
+.ghost-reset {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  background: transparent;
+  border: 1px solid var(--ybc-border);
+  border-radius: 100px;
+  color: var(--ybc-text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+.ghost-reset:hover { border-color: var(--ybc-accent-light); color: var(--ybc-accent-light); }
 
 /* ── History ────────────────────────────────── */
 .history-header {
@@ -874,6 +930,6 @@ onUnmounted(() => {
   .style-grid { grid-template-columns: repeat(2, 1fr); }
   .color-row { flex-direction: column; gap: 10px; }
   .result-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .download-section :deep(.el-button) { min-width: 100%; }
+  .download-section { grid-template-columns: 1fr; }
 }
 </style>

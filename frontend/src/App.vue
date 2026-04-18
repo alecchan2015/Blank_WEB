@@ -59,6 +59,21 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Keyboard focus — WCAG 2.1 AA accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--ybc-accent, #6366f1);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Mouse/touch interactions stay clean */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) { outline: none; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

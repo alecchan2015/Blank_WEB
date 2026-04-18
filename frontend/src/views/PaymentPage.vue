@@ -1,6 +1,18 @@
 <template>
-  <div class="payment-page" v-loading="loading">
-    <div v-if="order" class="pay-card">
+  <div class="payment-page">
+    <!-- Loading skeleton -->
+    <div v-if="loading && !order" class="pay-card skeleton">
+      <div class="sk-line sk-title"></div>
+      <div class="sk-box">
+        <div class="sk-row"><span class="sk-line sk-xs"></span><span class="sk-line sk-mid"></span></div>
+        <div class="sk-row"><span class="sk-line sk-xs"></span><span class="sk-line sk-mid"></span></div>
+        <div class="sk-row"><span class="sk-line sk-xs"></span><span class="sk-line sk-short"></span></div>
+        <div class="sk-row"><span class="sk-line sk-xs"></span><span class="sk-line sk-mid"></span></div>
+      </div>
+      <div class="sk-line sk-btn"></div>
+    </div>
+
+    <div v-else-if="order" class="pay-card">
       <div class="pay-header">
         <h2>订单支付</h2>
         <span class="status-chip" :class="`s-${order.status}`">
@@ -162,6 +174,33 @@ onMounted(load)
   border-radius: 20px;
   padding: 32px;
   box-shadow: var(--ybc-shadow-md);
+}
+
+/* Skeleton */
+.pay-card.skeleton { display: flex; flex-direction: column; gap: 16px; }
+.pay-card.skeleton .sk-line {
+  height: 14px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: sk-shim 1.5s infinite linear;
+  border-radius: 4px;
+}
+.sk-title { width: 140px; height: 20px; }
+.sk-xs    { width: 60px; height: 11px; }
+.sk-short { width: 80px; }
+.sk-mid   { width: 120px; }
+.sk-btn   { height: 48px; border-radius: 12px !important; width: 100%; margin-top: 8px; }
+.sk-box {
+  display: flex; flex-direction: column; gap: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--ybc-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+.sk-row { display: flex; justify-content: space-between; align-items: center; }
+@keyframes sk-shim {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .pay-header {

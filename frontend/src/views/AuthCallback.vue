@@ -42,13 +42,13 @@ onMounted(async () => {
 
   if (!code || !stateParam) {
     state.value = 'error'
-    errorMsg.value = '缺少必要的回调参数'
+    errorMsg.value = '登录链接不完整，请重新发起登录'
     return
   }
 
   if (savedState && stateParam !== savedState) {
     state.value = 'error'
-    errorMsg.value = 'state 不匹配（可能是 CSRF 或会话过期）'
+    errorMsg.value = '登录链接已失效，请重新登录'
     return
   }
 

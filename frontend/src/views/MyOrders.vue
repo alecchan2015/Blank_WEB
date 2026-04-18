@@ -20,7 +20,9 @@
     </div>
 
     <div v-else class="order-list" :class="{ loading }">
-      <div v-for="o in orders" :key="o.id" class="order-item" @click="$router.push(`/payment/${o.order_no}`)">
+      <div v-for="o in orders" :key="o.id"
+        class="order-item" :class="{ clickable: isClickable(o.status) }"
+        @click="isClickable(o.status) && $router.push(`/payment/${o.order_no}`)">
         <div class="main-row">
           <div class="left">
             <div class="plan-name">{{ o.plan?.name }}</div>
@@ -62,6 +64,7 @@ const STATUS = {
 }
 
 function channelLabel(c) { return CHANNELS[c] || c }
+function isClickable(s) { return ['pending', 'awaiting_confirm'].includes(s) }
 function statusLabel(s) { return STATUS[s] || s }
 function formatDate(s) { return new Date(s).toLocaleString('zh-CN') }
 
@@ -153,10 +156,10 @@ onMounted(load)
   border: 1px solid var(--ybc-border);
   border-radius: 14px;
   padding: 16px 20px;
-  cursor: pointer;
   transition: 0.15s;
 }
-.order-item:hover {
+.order-item.clickable { cursor: pointer; }
+.order-item.clickable:hover {
   border-color: rgba(99, 102, 241, 0.3);
   transform: translateY(-1px);
 }

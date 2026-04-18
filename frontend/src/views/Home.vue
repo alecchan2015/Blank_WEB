@@ -55,7 +55,7 @@
       <div class="hero-content">
         <div class="hero-badge">
           <span class="badge-dot"></span>
-          AI-Powered Brand Strategy
+          AI 驱动 · 品牌战略平台
         </div>
         <h1 class="hero-title">
           <span class="title-line">用 AI 重新定义</span>
@@ -149,6 +149,15 @@
                 <path d="M8 5v3M8 10.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
               </svg>
               多专家协作：{{ selectedAgentNames.join(' → ') }}
+            </div>
+          </transition>
+          <transition name="fade">
+            <div v-if="inlineError" class="inline-error">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M8 5v3M8 10v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              {{ inlineError }}
             </div>
           </transition>
         </div>
@@ -308,11 +317,13 @@ function handleLogout() {
 
 // Submit task
 const pendingSubmit = ref(false)
+const inlineError = ref('')
 
 function handleSubmit() {
-  if (!form.value.query.trim()) return
+  inlineError.value = ''
+  if (!form.value.query.trim()) { inlineError.value = '请先描述您的品牌需求'; return }
   if (!form.value.agents_selected.length) {
-    alert('请选择至少一个专家')
+    inlineError.value = '请至少选择一位 AI 专家'
     return
   }
   if (!store.isLoggedIn) {
@@ -333,7 +344,7 @@ async function doSubmitTask() {
     })
     router.push(`/tasks/${task.id}`)
   } catch (e) {
-    alert(e.message || '创建失败')
+    inlineError.value = e.message || '任务创建失败，请稍后重试'
   } finally {
     submitting.value = false
   }
@@ -811,6 +822,14 @@ onMounted(async () => {
   border: 1px solid rgba(99,102,241,0.12);
   border-radius: 8px;
   font-size: 12px; color: var(--color-accent-light);
+}
+.inline-error {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 10px; padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  font-size: 12px; color: #fca5a5;
 }
 
 /* ============ Features ============ */
