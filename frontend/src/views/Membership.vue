@@ -83,7 +83,7 @@
             <div class="plan-price">
               <span class="currency">¥</span>
               <span class="amount">{{ (plan.price_cents / 100).toFixed(0) }}</span>
-              <span class="duration">/ {{ plan.duration_days }} 天</span>
+              <span class="duration">/ {{ $t('common.unit.days', { n: plan.duration_days }) }}</span>
             </div>
 
             <div class="plan-benefits">
@@ -118,7 +118,7 @@
 
             <div class="summary">
               <div class="sum-row"><span>{{ $t('membership.modal.plan') }}</span><b>{{ selectedPlan?.name }}</b></div>
-              <div class="sum-row"><span>{{ $t('membership.modal.duration') }}</span>{{ selectedPlan?.duration_days }} 天</div>
+              <div class="sum-row"><span>{{ $t('membership.modal.duration') }}</span>{{ $t('common.unit.days', { n: selectedPlan?.duration_days }) }}</div>
               <div class="sum-row amount-row"><span>{{ $t('membership.modal.amount') }}</span>
                 <b class="amt">¥ {{ (selectedPlan?.price_cents / 100).toFixed(2) }}</b>
               </div>
